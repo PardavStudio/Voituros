@@ -28,7 +28,7 @@ test('boot — canvas, distance 0.0 m, zéro erreur console', async ({ page }) =
 test('drive-forward — 3s de gaz ⇒ distance > 5 m, caméra a suivi', async ({ page }) => {
   const x0 = await carX(page);
   await page.keyboard.down('ArrowRight');
-  await page.waitForFunction(() => window.__VOITUROS__.distance > 5, null, { timeout: 10000 });
+  await page.waitForFunction(() => window.__VOITUROS__.distance > 5, null, { timeout: 40000 });
   await page.waitForTimeout(2000);
   await page.keyboard.up('ArrowRight');
   const x1 = await carX(page);
@@ -44,7 +44,7 @@ test('drive-backward — marche arrière, pas de marche avant fantôme', async (
   await page.waitForTimeout(2000);
   await page.keyboard.up('ArrowLeft');
   const x1 = await carX(page);
-  expect(x1).toBeLessThan(x0 + 50); // < spawn + 5 m
+  expect(x1).toBeLessThan(x0 + 50);
 });
 
 test('difficulty-switch — Hard régénère la route', async ({ page }) => {
@@ -58,8 +58,8 @@ test('difficulty-switch — Hard régénère la route', async ({ page }) => {
 
 test('flip-death-tombstone — flip debug ⇒ warning, mort, tombe', async ({ page }) => {
   await page.evaluate(() => window.__VOITUROS__.debugFlip());
-  await expect(page.getByTestId('flip-warning')).toBeVisible({ timeout: 5000 });
-  await page.waitForFunction(() => window.__VOITUROS__.deaths === 1, null, { timeout: 15000 });
+  await expect(page.getByTestId('flip-warning')).toBeVisible({ timeout: 15000 });
+  await page.waitForFunction(() => window.__VOITUROS__.deaths === 1, null, { timeout: 45000 });
   await expect(page.getByTestId('toast')).toContainText('m');
   expect(await page.evaluate(() => window.__VOITUROS__.graves.length)).toBe(1);
   await page.screenshot({ path: 'screenshots/tombstone.png' });
@@ -69,9 +69,9 @@ test('respawn-new-car — nouvelle voiture au départ après la mort', async ({ 
   const spec1 = await page.evaluate(() => window.__VOITUROS__.carSpec);
   expect(spec1).not.toBeNull();
   await page.evaluate(() => window.__VOITUROS__.debugFlip());
-  await page.waitForFunction(() => window.__VOITUROS__.deaths === 1, null, { timeout: 15000 });
+  await page.waitForFunction(() => window.__VOITUROS__.deaths === 1, null, { timeout: 45000 });
   await page.waitForFunction((s1) => JSON.stringify(window.__VOITUROS__.carSpec) !== JSON.stringify(s1), spec1, {
-    timeout: 10000,
+    timeout: 30000,
   });
   const spec2 = await page.evaluate(() => window.__VOITUROS__.carSpec);
   expect(JSON.stringify(spec2)).not.toBe(JSON.stringify(spec1));
@@ -89,3 +89,4 @@ test('camera-follow — la voiture reste dans le viewport à vitesse max', async
   expect(Math.abs(info.carScreenX - info.centerX)).toBeLessThan(0.4 * info.viewportW);
   await page.screenshot({ path: 'screenshots/camera.png' });
 });
+

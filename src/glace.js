@@ -1,38 +1,36 @@
-/**
- * Glace procédurale : dalle (dégradé profondeur), fissures en marche
- * aléatoire branchue, bulles d'air piégées, étincelles baked + scintillement
- * dynamique recyclé autour de la caméra, reflet spéculaire du phare.
- * (Statique baké une fois par route ; seuls twinkles + reflet bougent.)
- * @module glace
- */
-import * as PIXI from 'pixi.js';
 import { mulberry32 } from './utils.js';
 import { routeYAt } from './route.js';
 
-/** Profondeur de la dalle de glace sous la surface (px). */
 export const ICE_DEPTH = 150;
-/** Teintes de glace par difficulté (subtil : même glace, eau plus/moins profonde). */
+
 export const ICE_TINTS = {
   easy: { top: '#d8eff7', mid: '#7fb8d9', deep: '#1d5a85' },
   medium: { top: '#cfe8f5', mid: '#6fa9cf', deep: '#174e78' },
   hard: { top: '#c2ddf0', mid: '#6399c2', deep: '#123f66' },
 };
 
-/**
- * Dessine la dalle de glace (UN appel par route) : remplace le trait néon.
- * @param {PIXI.Graphics} graphics Graphics monde (déjà enfant du layer).
- * @param {Array<{x:number,y:number}>} points Points de route échantillonnés.
- * @param {unknown} difficulty Difficulté (teinte).
- * @param {unknown} seed Graine (fissures/bulles déterministes).
- * @returns {void}
- */
+function mixHex(a, b, t) {
+  const pa = parseInt(a.slice(1), 16);
+  const pb = parseInt(b.slice(1), 16);
+  const c = (x, y) => Math.round(x + (y - x) * t);
+  const r = c((pa >> 16) & 255, (pb >> 16) & 255);
+  const g = c((pa >> 8) & 255, (pb >> 8) & 255);
+  const bl = c(pa & 255, pb & 255);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${bl.toString(16).padStart(2, '0')}`;
+}
+
+function depthColor(tint, f) {
+  if (f < 0.18) return mixHex(tint.top, tint.mid, f / 0.18);
+  if (f < 0.55) return mixHex(tint.mid, tint.deep, (f - 0.18) / 0.37);
+  return mixHex(tint.deep, '#0a2036', (f - 0.55) / 0.45);
+}
+
 export function drawIce(graphics, points, difficulty, seed) {
   const key = String(difficulty || '').toLowerCase();
   const tint = ICE_TINTS[key] || ICE_TINTS.medium;
   const n = points.length;
   const rng = mulberry32(typeof seed === 'number' ? seed : 1);
 
-  // (a) Abîme sombre sous la dalle (le vide sous la glace).
   graphics.moveTo(points[0].x, points[0].y + ICE_DEPTH);
   for (let i = 0; i < n; i++) graphics.lineTo(points[i].x, points[i].y + ICE_DEPTH);
   graphics.lineTo(points[n - 1].x, points[n - 1].y + 2000);
@@ -40,29 +38,17 @@ export function drawIce(graphics, points, difficulty, seed) {
   graphics.closePath();
   graphics.fill({ color: '#070c16' });
 
-  // (b) Dalle : dégradé vertical local (surface pâle → bleu profond).
-  const grad = new PIXI.FillGradient({
-    type: 'linear',
-    start: { x: 0.5, y: 0 },
-    end: { x: 0.5, y: 1 },
-    textureSpace: 'local',
-    colorStops: [
-      { offset: 0, color: tint.top },
-      { offset: 0.18, color: tint.mid },
-      { offset: 0.55, color: tint.deep },
-      { offset: 1, color: '#0a2036' },
-    ],
-  });
-  graphics.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < n; i++) graphics.lineTo(points[i].x, points[i].y);
-  graphics.lineTo(points[n - 1].x, points[n - 1].y + ICE_DEPTH);
-  graphics.lineTo(points[0].x, points[0].y + ICE_DEPTH);
-  graphics.closePath();
-  graphics.fill({ fill: grad });
+  const BANDS = 14;
+  for (let b = 0; b < BANDS; b++) {
+    const f0 = b / BANDS;
+    const f1 = (b + 1) / BANDS;
+    graphics.moveTo(points[0].x, points[0].y + f0 * ICE_DEPTH);
+    for (let i = 1; i < n; i++) graphics.lineTo(points[i].x, points[i].y + f0 * ICE_DEPTH);
+    for (let i = n - 1; i >= 0; i--) graphics.lineTo(points[i].x, points[i].y + f1 * ICE_DEPTH);
+    graphics.closePath();
+    graphics.fill({ color: depthColor(tint, (f0 + f1) / 2) });
+  }
 
-  // (c) Fissures : marches aléatoires branchues le long de la surface,
-  // STRICTEMENT dans la dalle (clamp chaque pas : rien ne dépasse ni dans
-  // le ciel ni sous la dalle).
   const x0 = points[0].x;
   const x1 = points[n - 1].x;
   const clampCrack = (x, y) => {
@@ -71,13 +57,13 @@ export function drawIce(graphics, points, difficulty, seed) {
     const cy = y < sy + 2 ? sy + 2 : y > sy + ICE_DEPTH - 10 ? sy + ICE_DEPTH - 10 : y;
     return [cx, cy];
   };
-  // Applique le clamp à un point [x, y] et retourne le point clampé.
+
   const cl = (p) => clampCrack(p[0], p[1]);
   const cracks = Math.floor((x1 - x0) / 90);
   for (let c = 0; c < cracks; c++) {
     let x = x0 + rng() * (x1 - x0);
     let y = routeYAt(points, x) + 3 + rng() * 8;
-    let ang = (rng() - 0.5) * 0.45; // quasi-horizontal
+    let ang = (rng() - 0.5) * 0.45;
     const segs = 5 + ((rng() * 5) | 0);
     const w = rng() < 0.6 ? 1 : 2;
     const a = 0.16 + rng() * 0.29;
@@ -92,7 +78,7 @@ export function drawIce(graphics, points, difficulty, seed) {
       y = p[1];
       graphics.lineTo(x, y);
       if (rng() < 0.3 && s > 0) {
-        // Branche secondaire (2-4 segments, ±50°), clampée aussi.
+
         let bx = x;
         let by = y;
         let ba = ang + (rng() < 0.5 ? -1 : 1) * (0.6 + rng() * 0.5);
@@ -110,7 +96,7 @@ export function drawIce(graphics, points, difficulty, seed) {
     }
     graphics.stroke({ width: w, color: '#eaf6ff', alpha: a });
   }
-  // Arêtes de pression : 3 longues cassures brillantes (relief de la glace).
+
   for (let r = 0; r < 3; r++) {
     let x = x0 + rng() * (x1 - x0 - 600);
     graphics.moveTo(x, routeYAt(points, x) + 4);
@@ -121,7 +107,6 @@ export function drawIce(graphics, points, difficulty, seed) {
     graphics.stroke({ width: 2.5, color: '#f2faff', alpha: 0.3 });
   }
 
-  // (d) Bulles d'air piégées (signature des lacs gelés).
   for (let i = 0; i < 600; i++) {
     const x = x0 + rng() * (x1 - x0);
     const y = routeYAt(points, x) + 6 + rng() * rng() * 60;
@@ -130,7 +115,6 @@ export function drawIce(graphics, points, difficulty, seed) {
     graphics.fill({ color: '#e8f4fc', alpha: 0.05 + rng() * 0.1 });
   }
 
-  // (e) Étincelles de surface baked (base des cristaux qui scintillent).
   for (let i = 0; i < 500; i++) {
     const x = x0 + rng() * (x1 - x0);
     const y = routeYAt(points, x) + rng() * rng() * 14;
@@ -139,8 +123,6 @@ export function drawIce(graphics, points, difficulty, seed) {
     graphics.fill({ color: rng() < 0.7 ? '#ffffff' : '#bfe6ff', alpha: 0.1 + rng() * 0.3 });
   }
 
-  // (e2) Cristaux dendritiques posés (grands flocons pris dans la glace :
-  // assez nombreux et vifs pour être VUS).
   const nc = Math.floor((x1 - x0) / 350);
   for (let i = 0; i < nc; i++) {
     const x = x0 + rng() * (x1 - x0);
@@ -155,8 +137,6 @@ export function drawIce(graphics, points, difficulty, seed) {
     );
   }
 
-  // (f) Reflets de surface (dashes courts SUR la glace, jamais un trait
-  // continu ni flottant dans l'air).
   for (let i = 0; i < 130; i++) {
     const x = x0 + rng() * (x1 - x0);
     const y = routeYAt(points, x) + 1;
@@ -167,16 +147,8 @@ export function drawIce(graphics, points, difficulty, seed) {
   }
 }
 
-/**
- * Étoile dendritique 6 branches (cristal de glace stylisé, esprit Reiter :
- * tronc épais + 2 rangées de branches à 60°, micro-asymétrie organique,
- * noyau hexagonal — jamais de flocon SVG parfait).
- * @param {PIXI.Graphics} g Cible. @param {number} x @param {number} y Centre.
- * @param {number} r Rayon. @param {number} rot Rotation. @param {string} color @param {number} alpha
- * @returns {void}
- */
 export function drawCrystal(g, x, y, r, rot, color, alpha) {
-  // Noyau hexagonal (signature des vrais cristaux).
+
   g.moveTo(x + r * 0.12, y);
   for (let k = 1; k <= 6; k++) {
     const a = (k * Math.PI) / 3;
@@ -188,14 +160,14 @@ export function drawCrystal(g, x, y, r, rot, color, alpha) {
     const a = rot + (b * Math.PI) / 3;
     const c = Math.cos(a);
     const s = Math.sin(a);
-    const len = r * (0.94 + Math.random() * 0.12); // asymétrie de pousse
+    const len = r * (0.94 + Math.random() * 0.12);
     g.moveTo(x, y);
     g.lineTo(x + c * len, y + s * len);
     for (const f of [0.45, 0.7]) {
       const bx = x + c * len * f;
       const by = y + s * len * f;
       const bl = len * (f < 0.5 ? 0.3 : 0.22) * (0.9 + Math.random() * 0.2);
-      const ja = (Math.random() - 0.5) * 0.16; // gigue d'angle
+      const ja = (Math.random() - 0.5) * 0.16;
       g.moveTo(bx, by);
       g.lineTo(bx + Math.cos(a + 1.05 + ja) * bl, by + Math.sin(a + 1.05 + ja) * bl);
       g.moveTo(bx, by);
@@ -205,16 +177,6 @@ export function drawCrystal(g, x, y, r, rot, color, alpha) {
   g.stroke({ width: 1.4, color, alpha });
 }
 
-/**
- * Crée les scintillements dynamiques (ABSCISSES MONDE fixées dans la glace :
- * ils ne suivent ni la voiture ni la caméra ; recyclés autour de la caméra,
- * zéro alloc : tableau fixe ; respawn furtif quand alpha ≈ 0).
- * @param {number} [count] Nombre d'étincelles.
- * @param {unknown} [seed] Graine.
- * @param {number} [x0] Début de route monde.
- * @param {number} [x1] Fin de route monde.
- * @returns {Array<{ x: number, tw: number, ph: number, sz: number, rot: number }>} État.
- */
 export function createTwinkles(count = 36, seed = 1, x0 = -600, x1 = 11400) {
   const rng = mulberry32(typeof seed === 'number' ? seed : 1);
   const out = [];
@@ -230,24 +192,13 @@ export function createTwinkles(count = 36, seed = 1, x0 = -600, x1 = 11400) {
   return out;
 }
 
-/**
- * Dessine les scintillements (croix 4 branches pulsées) : positions MONDE,
- * la caméra passe dessus sans les entraîner.
- * @param {PIXI.Graphics} g Cible (coordonnées monde).
- * @param {Array} twinkles État (cf. createTwinkles).
- * @param {number} t Horloge (s).
- * @param {number} camX Caméra X monde.
- * @param {number} viewW Largeur viewport monde (≈ écran / zoom).
- * @param {Array<{x:number,y:number}>} points Points de route.
- * @returns {void}
- */
 export function drawTwinkles(g, twinkles, t, camX, viewW, points) {
   g.clear();
   const half = viewW / 2 + 200;
   for (const p of twinkles) {
     const a = 0.5 + 0.5 * Math.sin(t * p.tw + p.ph);
     if (p.x < camX - half || p.x > camX + half) {
-      if (a > 0.05) continue; // respawn furtif : seulement quand éteint
+      if (a > 0.05) continue;
       p.x = camX + (Math.random() * 2 - 1) * half;
       p.rot = Math.random() * Math.PI;
     }
@@ -261,3 +212,4 @@ export function drawTwinkles(g, twinkles, t, camX, viewW, points) {
     g.stroke({ width: 1, color: '#eaf7ff', alpha: 0.75 * a });
   }
 }
+

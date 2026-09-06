@@ -1,18 +1,5 @@
-/**
- * Neige réaliste (espace écran) : 3 couches de profondeur (loin = petits,
- * lents, transparents ; près = gros, rapides, nets), sway sinusoïdal par
- * flocon + rafales de vent globales lentes. Zéro alloc par frame.
- * @module neige
- */
-
-/** Nombre de flocons (fixe, tient 60 fps partout). */
 export const SNOW_N = 220;
 
-/**
- * Crée la chute (positions écran normalisées, état persistant).
- * @param {unknown} [seed] Graine.
- * @returns {{ flakes: Array<{ x: number, y: number, z: 0|1|2, size: number, vy: number, ph: number, fr: number, sw: number }>, t: number, wind: number }}
- */
 export function createSnow(seed = 7) {
   let s = (typeof seed === 'number' ? seed : 7) >>> 0 || 1;
   const rnd = () => {
@@ -40,25 +27,11 @@ export function createSnow(seed = 7) {
   return { flakes, t: rnd() * 20, wind: 10 };
 }
 
-/**
- * Met à jour + dessine la neige (coordonnées écran px, wrap total).
- * Quand la voiture avance, le monde défile : la neige paraît reculer
- * (vent apparent = −vitesse caméra, pondéré par la profondeur — parallaxe).
- * Avec `env`, chaque flocon est éclairé comme les poussières du phare
- * (même test faisceau/occlusion) et clipsé sous le terrain.
- * @param {PIXI.Graphics} g Cible (layer écran, PAS de transform caméra).
- * @param {{ flakes: Array, t: number, wind: number }} snow État.
- * @param {number} dt Delta temps (s).
- * @param {number} w Largeur écran. @param {number} h Hauteur écran.
- * @param {number} [camVX] Vitesse caméra X monde (px/s, pour le vent apparent).
- * @param {{ camX: number, camY: number, zoom: number, beam: (wx:number,wy:number)=>number, groundY: (wx:number)=>number } | null} [env] Contexte monde (optionnel).
- * @returns {void}
- */
 export function drawSnow(g, snow, dt, w, h, camVX = 0, env = null) {
   const step = Math.min(0.1, Math.max(0, dt || 0));
   snow.t += step;
   const t = snow.t;
-  // Rafales : vent global lent (base 10 + 2 sinusoïdes désaccordées).
+
   snow.wind = 10 + 18 * Math.sin(t * 0.11) + 8 * Math.sin(t * 0.043 + 2);
   g.clear();
   if (w <= 0 || h <= 0 || !Number.isFinite(step) || step <= 0) return;
@@ -75,7 +48,7 @@ export function drawSnow(g, snow, dt, w, h, camVX = 0, env = null) {
   for (const f of snow.flakes) {
     const depthK = f.z === 0 ? 0.4 : f.z === 1 ? 0.7 : 1;
     f.y += (f.vy / h) * step;
-    // Sway : dérive latérale sinusoïdale (chaque flocon sa phase).
+
     const swayX = Math.sin(t * f.fr + f.ph) * f.sw;
     f.x += ((snow.wind * depthK - vx * depthK * 0.9 + swayX * f.fr) / w) * step;
     if (f.y > 1.02) {
@@ -91,9 +64,7 @@ export function drawSnow(g, snow, dt, w, h, camVX = 0, env = null) {
     let alpha = f.z === 0 ? 0.28 : f.z === 1 ? 0.5 : 0.75;
     let tint = '#f2f7fc';
     if (useEnv) {
-      // Écran → monde (inverse transform caméra), puis même test que les
-      // poussières : sous le terrain = quasi invisible, dans le faisceau =
-      // boost + teinte chaude (le faisceau prend en compte les flocons).
+
       const wx = (px - w / 2) / ez + ecx;
       const wy = (py - h * 0.55) / ez + ecy;
       if (wy > env.groundY(wx) + 2) {
@@ -107,7 +78,7 @@ export function drawSnow(g, snow, dt, w, h, camVX = 0, env = null) {
       }
     }
     if (f.z === 2) {
-      // Proches : losanges (pas des disques parfaits — lisible même en statique).
+
       const s = f.size;
       g.moveTo(px - s, py);
       g.lineTo(px, py - s * 1.25);
@@ -121,3 +92,4 @@ export function drawSnow(g, snow, dt, w, h, camVX = 0, env = null) {
     }
   }
 }
+

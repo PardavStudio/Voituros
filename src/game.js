@@ -1,7 +1,3 @@
-/**
- * Game : machine à états ready|driving|flipped|dead, distance/best/tombes/respawn.
- * @module game
- */
 import * as PIXI from 'pixi.js';
 import RAPIER from '@dimforge/rapier2d-compat';
 import {
@@ -31,22 +27,16 @@ import {
 import { createTwinkles, drawTwinkles } from './glace.js';
 import { normalizeSeed } from './utils.js';
 
-/** cos(angle) < FLIP_COS ⇒ retourné (≈ ±100°, toit vers le bas). */
 export const FLIP_COS = -0.17;
-/** Durée de retournement avant la mort (s). */
+
 export const FLIP_TIME = 3.0;
-/** Délai avant respawn après la mort (s). */
+
 export const RESPAWN_DELAY = 1.2;
-/** Abscisse de spawn. */
+
 export const SPAWN_X = 0;
 
-/**
- * Partie : monde physique, route, voiture active, tombes, scores.
- */
 export class Game {
-  /**
-   * @param {{ world: import('@dimforge/rapier2d-compat').World, worldLayer: PIXI.Container, camera?: object, best?: number, audio?: { onSpawn?: ()=>void, onDeath?: ()=>void } , ui?: { toast?: (msg:string)=>void, flip?: (visible:boolean, remaining:number, frac:number)=>void, hint?: ()=>void } }} opts
-   */
+
   constructor({ world, worldLayer, camera = null, best = 0, audio = null, ui = {} }) {
     this.world = world;
     this.layer = worldLayer;
@@ -67,7 +57,7 @@ export class Game {
     this.distance = 0;
     this.best = Number.isFinite(best) && best > 0 ? best : 0;
     this.deaths = 0;
-    /** Tombes : enregistrements purs {x, y, distance} (sérialisables). */
+
     this.graves = [];
     this.graveVisuals = [];
     this.car = null;
@@ -83,16 +73,10 @@ export class Game {
     this.brake = false;
   }
 
-  /**
-   * (Re)construit la route + respawn. Tombes effacées, best conservé.
-   * @param {unknown} seed Graine.
-   * @param {unknown} difficulty Difficulté.
-   * @returns {{ seed: number, difficulty: string }}
-   */
   newRoute(seed, difficulty) {
     this.seed = normalizeSeed(seed);
     this.difficulty = normalizeDifficulty(difficulty);
-    // Nettoyage complet : voiture active, visuels de tombes, décors, colliders.
+
     if (this.car) {
       destroyCar(this.world, this.car);
       this.car = null;
@@ -108,7 +92,7 @@ export class Game {
     this.route = generateRoute(this.seed, this.difficulty);
     this.routeHandle = buildRouteColliders(this.world, this.route.points);
     const pts = this.route.points;
-    // Scintillements ancrés dans la glace sur toute la route (monde absolu).
+
     this.twinkles = createTwinkles(36, this.seed, pts[0].x, pts[pts.length - 1].x);
     this.routeGfx.clear();
     drawRoute(this.routeGfx, this.route.points, this.difficulty, this.seed);
@@ -117,15 +101,9 @@ export class Game {
     return { seed: this.seed, difficulty: this.difficulty };
   }
 
-  /**
-   * Fait apparaître une voiture neuve au départ (couleur forcée différente).
-   * @param {{ color?: string } | null} prevSpec Spec précédente (anti-doublon couleur).
-   * @returns {void}
-   */
   spawnNewCar(prevSpec) {
     if (this.car) {
-      // Les corps (même fantômes, fixes + désactivés) sont retirés du monde ;
-      // le visuel d'une tombe est conservé sur place.
+
       destroyCar(this.world, this.car, { keepVisual: this.car.dead });
       if (this.car.dead) this.graveVisuals.push(this.car.container);
       this.car = null;
@@ -140,11 +118,11 @@ export class Game {
     }
     const spawn = { x: SPAWN_X, y: routeYAt(this.route.points, SPAWN_X) - 80 };
     this.car = createCar(this.world, spec, spawn);
-    // Éclairage monde sous la voiture (wash, fan, poussières).
+
     this.carLayer.addChildAt(this.car.washMesh, 0);
     this.carLayer.addChildAt(this.car.fanMesh, 1);
     this.carLayer.addChildAt(this.car.dustMesh, 2);
-    // Blobs d'ombre (sprites) : sous la voiture, ajoutés en tête.
+
     for (const s of [this.car.shadowSpr1, this.car.shadowSpr2]) {
       if (s) this.carLayer.addChildAt(s, 0);
     }
@@ -160,27 +138,16 @@ export class Game {
       try {
         this.audio.onSpawn();
       } catch {
-        /* audio optionnel */
+
       }
     }
   }
 
-  /**
-   * Mémorise l'input courant (appliqué à chaque fixedStep).
-   * @param {-1|0|1} dir Direction.
-   * @param {boolean} brake Frein.
-   * @returns {void}
-   */
   setInput(dir, brake) {
     this.dir = dir;
     this.brake = brake;
   }
 
-  /**
-   * Un pas physique à 120 Hz : suspensions, propulsion, step, états.
-   * @param {number} dt Pas de temps (s).
-   * @returns {void}
-   */
   fixedStep(dt) {
     const car = this.car;
     if (!car || !this.route) return;
@@ -210,7 +177,7 @@ export class Game {
       try {
         localStorage.setItem('voituros.best', String(this.best));
       } catch {
-        /* stockage indisponible */
+
       }
     }
 
@@ -230,13 +197,11 @@ export class Game {
       else this.state = 'ready';
     }
 
-    // Chute sous la route ⇒ mort immédiate (tombe à la projection x).
     if (t.y > 2000 || t.y - routeYAt(this.route.points, t.x) > 500) {
       this.die('fall', t);
       return;
     }
 
-    // Bloquage sans flip : hint, pas de mort auto.
     const lv = car.chassis.linvel();
     if (Math.hypot(lv.x, lv.y) < 20 && this.distance < 5) {
       this.stuckTimer += dt;
@@ -249,24 +214,12 @@ export class Game {
     }
   }
 
-  /** Recopie physique→visuels, interpolée + éclairage (appel par frame).
-   * @param {number} [alpha] Reste accumulateur/STEP.
-   * @param {number} [dt] Delta temps rendu (s, éclairage/poussières).
-   * @returns {void} */
   frame(alpha = 1, dt = 0) {
     if (!this.car) return;
     syncCarVisual(this.car, alpha);
     updateCarLight(this.car, dt, this.route ? this.route.points : null);
   }
 
-  /**
-   * Glace animée par frame : scintillements autour de la caméra (l'ombre et
-   * la nappe sont des sprites portés par la voiture, cf. voiture.js).
-   * @param {number} dt Delta temps rendu (s).
-   * @param {number} camX Caméra X monde.
-   * @param {number} viewW Largeur viewport monde.
-   * @returns {void}
-   */
   updateIce(dt, camX, viewW) {
     if (!this.route) return;
     const step = Math.min(0.1, Math.max(0, dt || 0));
@@ -276,12 +229,6 @@ export class Game {
     drawTwinkles(this.twinkleGfx, this.twinkles, this.twinkleT, cx, vw, this.route.points);
   }
 
-  /**
-   * Tue la voiture : fantôme sur place + tombe + toast, respawn dans 1.2 s.
-   * @param {'flip'|'fall'} kind Cause.
-   * @param {{ x: number, y: number }} t Position de la mort.
-   * @returns {void}
-   */
   die(kind, t) {
     const car = this.car;
     if (!car || this.state === 'dead') return;
@@ -300,24 +247,19 @@ export class Game {
       try {
         this.audio.onDeath();
       } catch {
-        /* audio optionnel */
+
       }
     }
     try {
       localStorage.setItem('voituros.best', String(this.best));
     } catch {
-      /* ignore */
+
     }
     this.ui.toast(
       kind === 'flip' ? `💀 Retourné ! ${d.toFixed(1)} m — nouvelle voiture…` : `💀 Chute ! ${d.toFixed(1)} m — nouvelle voiture…`,
     );
   }
 
-  /**
-   * Ajoute le label de tombe `💀 XX.X m` sous la voiture morte.
-   * @param {{ x: number, y: number, distance: number }} grave Tombe.
-   * @returns {void}
-   */
   addGraveLabel(grave) {
     const c = new PIXI.Container();
     c.position.set(grave.x, grave.y + 44);
@@ -333,22 +275,18 @@ export class Game {
     this.graveVisuals.push(c);
   }
 
-  /** Abscisse voiture (0 si absente). @returns {number} */
   get carX() {
     return this.car ? this.car.chassis.translation().x : 0;
   }
 
-  /** Ordonnée voiture. @returns {number} */
   get carY() {
     return this.car ? this.car.chassis.translation().y : 0;
   }
 
-  /** Angle châssis (rad, pour la vitesse longitudinale du moteur audio). @returns {number} */
   get carAngle() {
     return this.car ? this.car.chassis.rotation() : 0;
   }
 
-  /** Vitesse longitudinale (projetée sur l'axe caisse, px/s). @returns {number} */
   get carLongSpeed() {
     if (!this.car) return 0;
     const v = this.car.chassis.linvel();
@@ -356,22 +294,16 @@ export class Game {
     return v.x * Math.cos(a) + v.y * Math.sin(a);
   }
 
-  /** Vélocité châssis. @returns {{x:number,y:number}} */
   get carVel() {
     if (!this.car) return { x: 0, y: 0 };
     const v = this.car.chassis.linvel();
     return { x: v.x, y: v.y };
   }
 
-  /** Spec de la voiture active (données pures). @returns {object|null} */
   get carSpec() {
     return this.car ? this.car.spec : null;
   }
 
-  /**
-   * Hook debug : télémétrie interne (vitesses roues/châssis, angle, état).
-   * @returns {{ x:number, y:number, angle:number, vx:number, vy:number, wheels:number[], state:string, flipTimer:number, distance:number, deaths:number }}
-   */
   debugState() {
     const car = this.car;
     if (!car) return { x: 0, y: 0, angle: 0, vx: 0, vy: 0, wheels: [], state: this.state, flipTimer: 0, distance: 0, deaths: this.deaths };
@@ -393,11 +325,6 @@ export class Game {
     };
   }
 
-  /**
-   * Hook test : retourne la voiture sur le toit et fige les corps pour que le
-   * compteur de retournement (3 s) soit déterministe (pas de restabilisation).
-   * @returns {void}
-   */
   debugFlip() {
     const car = this.car;
     if (!car || this.state === 'dead') return;
@@ -408,8 +335,7 @@ export class Game {
     car.chassis.setRotation(Math.PI, true);
     car.chassis.setLinvel({ x: 0, y: 0 }, true);
     car.chassis.setAngvel(0, true);
-    // Retourner aussi les roues et essieux (rotation PI autour du châssis)
-    // pour que la voiture entière soit sur le toit et reste figée de façon déterministe.
+
     for (const { body, axle, anchor } of car.wheelMeshes) {
       body.setTranslation({ x: cx - anchor.x, y: cy - anchor.y }, true);
       body.setRotation(Math.PI, true);
@@ -426,30 +352,24 @@ export class Game {
       try {
         b.setBodyType(RAPIER.RigidBodyType.Fixed, true);
       } catch {
-        /* ignore */
+
       }
     }
     snapRender(car);
   }
 
-  /**
-   * Hook test : téléporte la voiture au-dessus de la route à x.
-   * @param {number} x Abscisse monde.
-   * @returns {void}
-   */
   teleport(x) {
     const car = this.car;
     if (!car || !this.route) return;
     const xx = Number.isFinite(x) ? x : SPAWN_X;
     const yy = routeYAt(this.route.points, xx) - 80;
-    // Si un debugFlip précédent a figé les corps (état flipped, pas mort),
-    // restaurer la dynamique pour que la voiture puisse rouler après le saut.
+
     if (this.state !== 'dead') {
       for (const b of [car.chassis, car.wheelF, car.wheelR, ...(car.axles || [])]) {
         try {
           if (b.bodyType() === RAPIER.RigidBodyType.Fixed) b.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
         } catch {
-          /* ignore */
+
         }
       }
       this.flipTimer = 0;
@@ -462,8 +382,7 @@ export class Game {
     car.chassis.setRotation(0, true);
     car.chassis.setLinvel({ x: 0, y: 0 }, true);
     car.chassis.setAngvel(0, true);
-    // Déplacer aussi les roues et essieux aux ancrages (rotation 0 ⇒ offset direct),
-    // sinon les joints tirent le châssis vers l'ancienne position.
+
     for (const { body, axle, anchor } of car.wheelMeshes) {
       body.setTranslation({ x: xx + anchor.x, y: yy + anchor.y }, true);
       body.setRotation(0, true);
@@ -479,13 +398,9 @@ export class Game {
     snapRender(car);
   }
 
-  /**
-   * Recommence la manche : voiture neuve au départ, distance à 0
-   * (deaths, tombes et best conservés).
-   * @returns {void}
-   */
   reset() {
     if (!this.route) return;
     this.spawnNewCar(this.car ? this.car.spec : null);
   }
 }
+

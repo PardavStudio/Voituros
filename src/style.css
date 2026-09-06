@@ -186,8 +186,6 @@ body {
   padding: 6px 12px;
 }
 
-/* Splash titre (boot) : vrai titre en jeu, style glace. Disparaît après
-   ~2.6 s ou au premier geste (pointer-events: none : jamais bloquant). */
 #splash {
   position: fixed;
   inset: 0;
@@ -237,8 +235,6 @@ body {
   display: none !important;
 }
 
-/* Joystick mobile : transparent, bas-droite, tactile uniquement.
-   Caché par défaut ; révélé au premier touchstart (body.touch). */
 #joystick {
   display: none;
   position: absolute;
@@ -318,7 +314,6 @@ body.touch #joystick {
     padding: 6px 8px;
   }
 
-  /* 390 px : le bloc central passe pleine largeur sous la rangée du haut. */
   .hud-top-center {
     left: 8px;
     right: 8px;
@@ -332,3 +327,4 @@ body.touch #joystick {
     padding: 3px 7px;
   }
 }
+

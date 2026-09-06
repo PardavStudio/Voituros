@@ -1,19 +1,7 @@
-/**
- * Peinture auto procédurale : teintes harmonieuses, motifs réalistes
- * (uni, bi-ton, bandes racing, bas de caisse) + reflet environnement
- * (dégradé ciel/sol, nacre, paillettes métallisées, reflet soleil dynamique).
- * @module peinture
- */
 import * as PIXI from 'pixi.js';
 
-/** Neutres réalistes (toit/bandes : blanc perle, argent, graphite, noir, or). */
 export const NEUTRALS = ['#f5f7fa', '#dfe3ea', '#aeb4bf', '#2a2f36', '#101216', '#c8a24a'];
 
-/**
- * hex → { h, s, l } (h ∈ [0,360), s/l ∈ [0,100]).
- * @param {string} hex Couleur `#rrggbb`.
- * @returns {{ h: number, s: number, l: number }}
- */
 export function hexToHsl(hex) {
   const n = parseInt(hex.slice(1), 16);
   const r = ((n >> 16) & 255) / 255;
@@ -32,11 +20,6 @@ export function hexToHsl(hex) {
   return { h, s, l };
 }
 
-/**
- * { h, s, l } → `#rrggbb`.
- * @param {number} h Teinte [0, 360). @param {number} s Saturation [0, 100]. @param {number} l Luminosité [0, 100].
- * @returns {string} Hex.
- */
 export function hslToHex(h, s, l) {
   h = ((h % 360) + 360) % 360;
   s = Math.min(100, Math.max(0, s)) / 100;
@@ -48,42 +31,32 @@ export function hslToHex(h, s, l) {
   return `#${to(f(0))}${to(f(8))}${to(f(4))}`;
 }
 
-/**
- * Éclaircit/assombrit + décale éventuellement la teinte (nacre/ciel/sol).
- * @param {string} hex Base. @param {number} dl Delta luminosité. @param {number} [dh] Delta teinte. @param {number} [ds] Delta saturation.
- * @returns {string} Hex.
- */
 export function shade(hex, dl, dh = 0, ds = 0) {
   const { h, s, l } = hexToHsl(hex);
   return hslToHex(h + dh, s + ds, l + dl);
 }
 
-/**
- * Génère une peinture harmonieuse et réaliste (déterministe si rng seedé).
- * @param {() => number} rng RNG dans [0, 1).
- * @returns {{ base: string, secondary: string, pattern: 'solid'|'two-tone'|'stripes'|'skirt', metal: number, pearl: number, seed: number }}
- */
 export function randomPaint(rng) {
   const roll = rng();
   const pattern = roll < 0.45 ? 'solid' : roll < 0.7 ? 'two-tone' : roll < 0.85 ? 'stripes' : 'skirt';
   let base;
   if (rng() < 0.2) {
-    // 20 % de neutres (argent, graphite, blanc, noir) : réaliste au quotidien.
+
     base = NEUTRALS[(rng() * 4) | 0];
   } else {
-    // Plancher de luminosité relevé : lisible sur fond dark theme.
+
     base = hslToHex((rng() * 360) | 0, 48 + rng() * 40, 34 + rng() * 26);
   }
   const { h: bh, s: bs } = hexToHsl(base);
   let secondary;
   if (rng() < 0.45) {
-    secondary = NEUTRALS[(rng() * NEUTRALS.length) | 0]; // toit/bandes neutres
+    secondary = NEUTRALS[(rng() * NEUTRALS.length) | 0];
   } else if (rng() < 0.5) {
-    secondary = hslToHex(bh + 25 + rng() * 35, bs, 45 + rng() * 25); // analogue
+    secondary = hslToHex(bh + 25 + rng() * 35, bs, 45 + rng() * 25);
   } else {
-    secondary = hslToHex(bh + 165 + rng() * 30, 40 + rng() * 35, 45 + rng() * 25); // complémentaire
+    secondary = hslToHex(bh + 165 + rng() * 30, 40 + rng() * 35, 45 + rng() * 25);
   }
-  // Garde-fou : jamais base ET secondaire sombres ensemble (illisible en jeu).
+
   if (pattern !== 'solid' && luminance(base) < 0.09 && luminance(secondary) < 0.09) {
     secondary = shade(secondary, 28);
   }
@@ -93,29 +66,18 @@ export function randomPaint(rng) {
   return { base, secondary, pattern, metal, pearl, seed };
 }
 
-/**
- * Stops du dégradé carrosserie (reflet ciel en haut, sol en bas, nacre).
- * Espace local 0 (haut) → 1 (bas du bounding box).
- * @param {{ base: string, metal: number, pearl: number, secondary: string }} paint Peinture.
- * @returns {Array<{ offset: number, color: string }>} Stops.
- */
 export function paintStops(paint) {
-  const c = 0.7 + 0.6 * paint.metal; // contraste métallisé
+  const c = 0.7 + 0.6 * paint.metal;
   const ph = hexToHsl(paint.secondary).h - hexToHsl(paint.base).h;
   return [
-    { offset: 0, color: shade(paint.base, 38 * c, ph * 0.25 * paint.pearl + 8, -12) }, // toit : ciel
+    { offset: 0, color: shade(paint.base, 38 * c, ph * 0.25 * paint.pearl + 8, -12) },
     { offset: 0.3, color: shade(paint.base, 14 * c, ph * 0.12 * paint.pearl, -4) },
-    { offset: 0.55, color: paint.base }, // ceinture : teinte pure
-    { offset: 0.78, color: shade(paint.base, -16 * c, -6, 4) }, // bas : sol
+    { offset: 0.55, color: paint.base },
+    { offset: 0.78, color: shade(paint.base, -16 * c, -6, 4) },
     { offset: 1, color: shade(paint.base, -30 * c, -10, 6) },
   ];
 }
 
-/**
- * Luminance relative d'une couleur (0 = noir, 1 = blanc).
- * @param {string} hex Couleur `#rrggbb`.
- * @returns {number} Luminance.
- */
 export function luminance(hex) {
   const n = parseInt(hex.slice(1), 16);
   const f = (c) => {
@@ -125,14 +87,6 @@ export function luminance(hex) {
   return 0.2126 * f(n >> 16) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255);
 }
 
-/**
- * Ordonnée du bord supérieur de la carrosserie à l'abscisse x (interpolation
- * de la chaîne haute v2→v3→v4→v5→v6). Sert à plaquer les motifs sans jamais
- * déborder (jitter des sommets inclus).
- * @param {Array<{x:number,y:number}>} v Sommets carrosserie.
- * @param {number} x Abscisse locale.
- * @returns {number} Ordonnée du bord haut.
- */
 export function roofYAt(v, x) {
   const chain = [v[2], v[3], v[4], v[5], v[6]];
   const xs = chain.map((p) => p.x);
@@ -151,11 +105,6 @@ export function roofYAt(v, x) {
   return Math.min(...chain.map((p) => p.y));
 }
 
-/**
- * Test point-dans-polygone (ray casting).
- * @param {number} x @param {number} y @param {Array<{x:number,y:number}>} poly Sommets.
- * @returns {boolean} Dedans ?
- */
 export function pointInPoly(x, y, poly) {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -168,20 +117,12 @@ export function pointInPoly(x, y, poly) {
   return inside;
 }
 
-/**
- * Peint la carrosserie : dégradé + motif + paillettes (statique par spawn,
- * SANS contour — la définition vient du contraste du dégradé).
- * @param {PIXI.Graphics} g Graphics cible (repère local voiture).
- * @param {{ bodyVerts: Array<{x:number,y:number}>, bodyLen: number, bodyH: number }} spec Spec voiture.
- * @param {{ base: string, secondary: string, pattern: string, metal: number, pearl: number, seed: number }} paint Peinture.
- * @returns {void}
- */
 export function drawPaint(g, spec, paint) {
   g.clear();
   const v = spec.bodyVerts;
   const L = spec.bodyLen;
   const H = spec.bodyH;
-  // Base : dégradé vertical local (0 = haut du bbox, 1 = bas).
+
   const grad = new PIXI.FillGradient({
     type: 'linear',
     start: { x: 0.5, y: 0 },
@@ -194,9 +135,8 @@ export function drawPaint(g, spec, paint) {
   g.closePath();
   g.fill({ fill: grad });
 
-  // Motifs (quads conservateurs, strictement dans la silhouette).
   if (paint.pattern === 'two-tone' && v.length >= 6) {
-    // Pavillon : triangle capot/pavillon/lunette, rétréci de 12 % vers son centroïde.
+
     const tri = [v[3], v[4], v[5]];
     const cx = (tri[0].x + tri[1].x + tri[2].x) / 3;
     const cy = (tri[0].y + tri[1].y + tri[2].y) / 3;
@@ -206,8 +146,7 @@ export function drawPaint(g, spec, paint) {
     g.closePath();
     g.fill({ color: paint.secondary });
   } else if (paint.pattern === 'stripes') {
-    // Bandes racing plaquées sur la ligne de toit (quads suivant la pente :
-    // impossible de déborder, marge incluse).
+
     const xA = -L * 0.26;
     const xB = L * 0.12;
     const margin = H * 0.055;
@@ -225,13 +164,11 @@ export function drawPaint(g, spec, paint) {
       g.fill({ color: paint.secondary, alpha: 0.95 });
     }
   } else if (paint.pattern === 'skirt') {
-    // Bas de caisse : bande basse (bord inférieur plat garanti).
+
     g.rect(-L / 2, H * 0.16, L, H * 0.34);
     g.fill({ color: shade(paint.secondary, -12) });
   }
 
-  // Point chaud spéculaire baked (reflet soleil sur l'aile avant : losange
-  // franc + cœur dense — le signal « peinture », pas plastique).
   {
     const hx = L * 0.16;
     const hy = roofYAt(v, hx) + H * 0.12;
@@ -251,8 +188,6 @@ export function drawPaint(g, spec, paint) {
     g.fill({ color: '#ffffff', alpha: 0.35 });
   }
 
-  // Ligne de caractère (cassure de tôle au niveau de la ceinture : ombre
-  // fine + arête claire — anti « plastique lisse »).
   g.moveTo(-L / 2, H * 0.08);
   g.lineTo(L / 2, H * 0.08);
   g.lineTo(L / 2, H * 0.14);
@@ -267,15 +202,6 @@ export function drawPaint(g, spec, paint) {
   g.fill({ color: '#ffffff', alpha: 0.1 });
 }
 
-/**
- * Reflet soleil dynamique : strie claire qui glisse sur le flanc avec le
- * tangage (redessiné par frame, 1 quad — négligeable devant les poussières).
- * @param {PIXI.Graphics} g Graphics dédié (enfant du container châssis).
- * @param {{ bodyLen: number, bodyH: number }} spec Spec voiture.
- * @param {{ metal: number }} paint Peinture.
- * @param {number} angle Tangage caisse (rad).
- * @returns {void}
- */
 export function drawGlint(g, spec, paint, angle) {
   g.clear();
   const L = spec.bodyLen;
@@ -291,3 +217,4 @@ export function drawGlint(g, spec, paint, angle) {
   g.closePath();
   g.fill({ color: '#ffffff', alpha: 0.08 + 0.06 * (paint?.metal ?? 0.5) });
 }
+

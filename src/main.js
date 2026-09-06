@@ -1,7 +1,3 @@
-/**
- * Boot Voituros : Pixi + Rapier, boucle 60 Hz, HUD DOM, inputs, hooks debug.
- * @module main
- */
 import * as PIXI from 'pixi.js';
 import RAPIER from '@dimforge/rapier2d-compat';
 import { Game } from './game.js';
@@ -15,7 +11,6 @@ import { routeYAt } from './route.js';
 const STEP = 1 / 120;
 const $ = (id) => document.getElementById(id);
 
-/** Lit les réglages (URL prioritaire, puis localStorage, puis défauts). */
 function loadSettings() {
   const q = new URLSearchParams(location.search);
   let seed = q.get('seed');
@@ -26,7 +21,7 @@ function loadSettings() {
     difficulty = difficulty ?? localStorage.getItem('voituros.difficulty');
     best = parseFloat(localStorage.getItem('voituros.best') || '0') || 0;
   } catch {
-    /* stockage indisponible */
+
   }
   return { seed: seed ?? String((Math.random() * 100000) | 0), difficulty: difficulty || 'medium', best };
 }
@@ -36,7 +31,7 @@ function persist(seed, difficulty) {
     localStorage.setItem('voituros.seed', String(seed));
     localStorage.setItem('voituros.difficulty', difficulty);
   } catch {
-    /* ignore */
+
   }
 }
 
@@ -59,7 +54,6 @@ async function boot() {
   $('app').appendChild(app.canvas);
   app.canvas.setAttribute('data-testid', 'game-canvas');
 
-  // Voie lactée en fond (hors monde : dérive lente + parallaxe caméra).
   const sky = createSky();
   app.stage.addChildAt(sky.container, 0);
 
@@ -67,14 +61,12 @@ async function boot() {
   app.stage.addChild(worldLayer);
   const camera = createCamera(app, worldLayer);
 
-  // Neige (espace écran, au-dessus du monde, sous le HUD DOM).
   const snowLayer = new PIXI.Container();
   app.stage.addChild(snowLayer);
   const snowGfx = new PIXI.Graphics();
   snowLayer.addChild(snowGfx);
   const snow = createSnow(7);
-  // Contexte monde pour la neige (pré-alloué, muté par frame : zéro alloc) :
-  // la neige est éclairée par le faisceau et clipsée sous le terrain.
+
   const snowEnv = {
     camVX: 0,
     camX: 0,
@@ -84,7 +76,6 @@ async function boot() {
     groundY: (wx) => (game.route ? routeYAt(game.route.points, wx) : 1e9),
   };
 
-  // HUD.
   const elDist = $('hud-distance');
   const elBest = $('hud-best');
   const elDeaths = $('hud-deaths');
@@ -118,9 +109,6 @@ async function boot() {
     hintTimer = secs;
   };
 
-  // Son moteur Greenwood (Greenwood devant la maison de CJ, banques GENRL
-  // 88/89) : inactif jusqu'au premier geste (autoplay policy), muet si
-  // l'audio est indisponible — jamais d'erreur console.
   const engine = createEngineAudio();
 
   const game = new Game({
@@ -132,10 +120,7 @@ async function boot() {
     ui: { toast, flip: setFlip, hint: () => showHint() },
   });
   game.world.timestep = STEP;
-  // Échelle moteur : Rapier plafonne les vélocités à 400·lengthUnit px/s en
-  // dur (non exposé). À lengthUnit = 1 la voiture ne pouvait jamais dépasser
-  // 400 px/s quel que soit le couple ; à 10 le plafond passe à 4000
-  // (vitesses atteintes ~600-700, contacts inchangés en mesure).
+
   game.world.integrationParameters.lengthUnit = 10;
   const applyRoute = (seed, difficulty, label) => {
     const r = game.newRoute(seed, difficulty);
@@ -156,11 +141,11 @@ async function boot() {
     toast(`Nouvelle route ${game.difficulty[0].toUpperCase() + game.difficulty.slice(1)} #${game.seed}`);
   };
   $('btn-restart').onclick = () => game.reset();
-  // Son moteur Greenwood : bouton 🔈/🔊/🔇 + déblocage au premier geste.
+
   const engineUI = wireEngineUI(engine, $('btn-mute'));
   applyRoute(settings.seed, settings.difficulty, null);
   showHint(4);
-  // Splash titre : masqué après ~2.6 s ou dès le premier geste.
+
   const splashEl = $('splash');
   let splashHidden = false;
   const hideSplash = () => {
@@ -172,10 +157,9 @@ async function boot() {
   window.addEventListener('keydown', hideSplash, { once: true, passive: true });
   window.addEventListener('pointerdown', hideSplash, { once: true, passive: true });
 
-  // Inputs (priorité au dernier en appui simultané, 0 au relâchement).
   const held = { left: false, right: false };
   let last = null;
-  let joyDir = 0; // joystick tactile (−1|0|1), clavier prioritaire
+  let joyDir = 0;
   const input = { dir: 0, brake: false };
   const recompute = () => {
     const kb = held.left && held.right ? (last === 'right' ? 1 : -1) : held.right ? 1 : held.left ? -1 : 0;
@@ -215,8 +199,6 @@ async function boot() {
     }
   });
 
-  // Joystick tactile (mobile) : révélé au premier toucher, glisser horizontal.
-  // Zone morte 10 px, course ±38 px, un seul doigt suivi (multi-touch safe).
   const joyEl = $('joystick');
   const joyKnob = $('joy-knob');
   const JOY_DEAD = 10;
@@ -271,8 +253,7 @@ async function boot() {
     joyEl.addEventListener(
       ev,
       (e) => {
-        // Plus aucun doigt sur le joystick ⇒ stop (couvre aussi les fins
-        // synthétiques sans changedTouches détaillés).
+
         if (e.touches.length === 0) {
           joyReset();
           return;
@@ -288,7 +269,6 @@ async function boot() {
     );
   }
 
-  // Hooks debug / tests (documentés, préfixés debug si action).
   const V = {
     carX() {
       return game.carX;
@@ -336,8 +316,6 @@ async function boot() {
   });
   window.__VOITUROS__ = V;
 
-  // Boucle : accumulateur 120 Hz (max 4 substeps = couvre 30 fps),
-  // sync interpolée, caméra, HUD.
   let acc = 0;
   let prev = performance.now();
   let muteTick = 0;
@@ -355,12 +333,11 @@ async function boot() {
       n++;
     }
     if (n === 4) acc = 0;
-    // Interpolation de rendu : alpha = reste/STEP (0 step sur écran 120 Hz+,
-    // step sauté/doublé à 60 Hz) ⇒ défilement continu, sans paliers.
+
     game.frame(Math.min(1, Math.max(0, acc / STEP)), dt);
     camera.update(dt, { x: game.carX, y: game.carY }, game.carVel);
     sky.update(dt, camera.camX, camera.camY);
-    // Glace animée (scintillements + reflet phare) + neige écran.
+
     game.updateIce(dt, camera.camX, (app.screen.width || innerWidth) / (camera.zoom || 1));
     const camVX = dt > 0 ? (camera.camX - prevCamX) / dt : 0;
     prevCamX = camera.camX;
@@ -369,8 +346,7 @@ async function boot() {
     snowEnv.camY = camera.camY;
     snowEnv.zoom = camera.zoom || 1;
     drawSnow(snowGfx, snow, dt, app.screen.width || innerWidth, app.screen.height || innerHeight, camVX, snowEnv);
-    // Moteur Greenwood : RPM via rapports (dents de scie), charge = gaz,
-    // roues libres quand retourné (ça mouline), coupé si mort.
+
     engine.update(dt, {
       speed: game.carLongSpeed,
       throttle: input.dir !== 0 ? 1 : 0,
@@ -397,9 +373,10 @@ async function boot() {
       hintTimer -= dt;
       if (hintTimer <= 0) elHint.classList.add('hidden');
     }
-    // État du bouton son (débloqué/muet) : 2×/s suffisent, pas d'alloc chaude.
+
     if ((muteTick++ & 31) === 0) engineUI.paint();
   });
 }
 
 boot();
+

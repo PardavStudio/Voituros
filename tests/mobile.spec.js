@@ -1,7 +1,5 @@
 import { test, expect } from '@playwright/test';
 
-// Joystick tactile (mobile) : caché sur desktop, révélé au premier toucher,
-// glisser à droite = avancer, à gauche = reculer, relâcher = stop.
 test('mobile-joystick — visible au toucher, pilote la voiture', async ({ browser }) => {
   const ctx = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -16,12 +14,11 @@ test('mobile-joystick — visible au toucher, pilote la voiture', async ({ brows
     await page.waitForTimeout(800);
 
     const joy = page.getByTestId('joystick');
-    await expect(joy).toBeHidden(); // pas de tactile utilisé ⇒ caché
+    await expect(joy).toBeHidden();
 
     const cdp = await ctx.newCDPSession(page);
     const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
 
-    // Premier toucher (n'importe où en bas-droite) ⇒ le joystick apparaît.
     await touch('touchStart', [{ x: 330, y: 760, id: 1 }]);
     await touch('touchEnd', []);
     await expect(joy).toBeVisible();
@@ -30,7 +27,6 @@ test('mobile-joystick — visible au toucher, pilote la voiture', async ({ brows
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
 
-    // Glisser à droite ⇒ avance (comme ArrowRight).
     const x0 = await page.evaluate(() => window.__VOITUROS__.carX());
     const knob = () => page.$eval('#joy-knob', (el) => el.style.transform);
     await touch('touchStart', [{ x: cx, y: cy, id: 2 }]);
@@ -43,9 +39,6 @@ test('mobile-joystick — visible au toucher, pilote la voiture', async ({ brows
     await touch('touchEnd', []);
     expect(await knob()).toBe('');
 
-    // Glisser à gauche ⇒ recule, pas de marche avant fantôme.
-    // (On repart de l'arrêt comme le test clavier : à haute vitesse la
-    // quantité de mouvement domine sur 1,5 s.)
     await page.getByTestId('btn-restart').click();
     await page.waitForTimeout(500);
     await touch('touchStart', [{ x: cx, y: cy, id: 3 }]);
@@ -60,3 +53,4 @@ test('mobile-joystick — visible au toucher, pilote la voiture', async ({ brows
     await ctx.close();
   }
 });
+
