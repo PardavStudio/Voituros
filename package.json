@@ -1,0 +1,22 @@
+{
+  "name": "voituros",
+  "version": "1.0.0",
+  "description": "Voituros - jeu 2D physics minimaliste dark theme (PixiJS + Rapier)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "test": "playwright test"
+  },
+  "keywords": [],
+  "dependencies": {
+    "@dimforge/rapier2d-compat": "^0.20.0",
+    "pixi.js": "^8.20.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "playwright": "^1.62.1",
+    "vite": "^8.2.2"
+  }
+}

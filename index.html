@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Voituros</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="hud" aria-hidden="false">
+      <div class="hud-top-left">
+        <h1>VOITUROS</h1>
+        <div class="stat">distance&nbsp;: <span data-testid="hud-distance" id="hud-distance">0.0 m</span></div>
+        <div class="stat">best&nbsp;: <span data-testid="hud-best" id="hud-best">0.0 m</span></div>
+        <div class="stat">morts&nbsp;: <span data-testid="hud-deaths" id="hud-deaths">0</span></div>
+      </div>
+
+      <div class="hud-top-center">
+        <button type="button" data-testid="btn-easy" id="btn-easy" aria-label="Difficulté facile">Easy</button>
+        <button type="button" data-testid="btn-medium" id="btn-medium" aria-label="Difficulté moyenne">Medium</button>
+        <button type="button" data-testid="btn-hard" id="btn-hard" aria-label="Difficulté difficile">Hard</button>
+        <button type="button" data-testid="btn-new-route" id="btn-new-route" aria-label="Générer une nouvelle route">Nouvelle route</button>
+        <span data-testid="hud-seed" id="hud-seed" title="Seed de la route">#0</span>
+      </div>
+
+      <div class="hud-top-right">
+        <button type="button" data-testid="btn-restart" id="btn-restart" aria-label="Recommencer la manche">Recommencer</button>
+        <span class="help">◀ ▶ / A D pour rouler • R restart</span>
+      </div>
+
+      <div class="hud-bottom-center">
+        <div data-testid="flip-warning" id="flip-warning" class="hidden" role="alert">
+          <span id="flip-warning-text">⚠ Retourné ! 3.0s</span>
+          <div class="flip-track"><div id="flip-bar"></div></div>
+        </div>
+        <div data-testid="toast" id="toast" role="status"></div>
+        <div id="hint" class="hidden">◀ ▶ pour rouler</div>
+      </div>
+
+      <div data-testid="joystick" id="joystick" aria-label="Joystick : glisser à droite pour avancer, à gauche pour reculer">
+        <span class="joy-arrow left">◀</span>
+        <div id="joy-knob"></div>
+        <span class="joy-arrow right">▶</span>
+      </div>
+    </div>
+
+    <div id="nogl" class="hidden">WebGL indisponible — Voituros ne peut pas démarrer sur ce navigateur.</div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,287 @@
+:root {
+  --bg: #0b0e14;
+  --panel: rgba(17, 24, 39, 0.82);
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --accent: #60a5fa;
+  --danger: #f43f5e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+#app,
+#app canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#hud button {
+  pointer-events: auto;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid #374151;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+#hud button:hover,
+#hud button:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+#hud button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b0e14;
+  font-weight: bold;
+}
+
+.hud-top-left {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.hud-top-left h1 {
+  margin: 0 0 2px;
+  font-size: 16px;
+  letter-spacing: 2px;
+}
+
+.hud-top-left .stat {
+  color: var(--text);
+}
+
+.hud-top-center {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 8px 10px;
+  max-width: 96vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+#hud-seed {
+  color: var(--muted);
+  min-width: 64px;
+  text-align: right;
+}
+
+.hud-top-right {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.hud-top-right .help {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.hud-bottom-center {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  width: max-content;
+  max-width: 92vw;
+}
+
+#flip-warning {
+  background: rgba(127, 29, 29, 0.9);
+  border: 1px solid var(--danger);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.flip-track {
+  margin-top: 6px;
+  width: 220px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#flip-bar {
+  height: 100%;
+  width: 0%;
+  background: #fff;
+}
+
+#toast {
+  background: var(--panel);
+  border: 1px solid #374151;
+  border-radius: 8px;
+  padding: 8px 14px;
+  min-height: 20px;
+  min-width: 120px;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+#toast.show {
+  opacity: 1;
+}
+
+#hint {
+  color: var(--muted);
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Joystick mobile : transparent, bas-droite, tactile uniquement.
+   Caché par défaut ; révélé au premier touchstart (body.touch). */
+#joystick {
+  display: none;
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  width: 132px;
+  height: 76px;
+  border-radius: 38px;
+  background: rgba(229, 231, 235, 0.08);
+  border: 1px solid rgba(229, 231, 235, 0.22);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+}
+
+body.touch #joystick {
+  display: flex;
+}
+
+#joystick .joy-arrow {
+  color: rgba(229, 231, 235, 0.4);
+  font-size: 16px;
+  pointer-events: none;
+}
+
+#joy-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 54px;
+  height: 54px;
+  margin-left: -27px;
+  margin-top: -27px;
+  border-radius: 50%;
+  background: rgba(229, 231, 235, 0.18);
+  border: 1px solid rgba(229, 231, 235, 0.35);
+  pointer-events: none;
+}
+
+#nogl {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--text);
+  z-index: 20;
+  padding: 24px;
+  text-align: center;
+}
+
+@media (max-width: 700px) {
+  #hud {
+    font-size: 12px;
+  }
+
+  .hud-top-right .help {
+    display: none;
+  }
+
+  .hud-top-left {
+    left: 8px;
+    padding: 6px 8px;
+  }
+
+  .hud-top-left h1 {
+    font-size: 13px;
+  }
+
+  .hud-top-right {
+    right: 8px;
+    padding: 6px 8px;
+  }
+
+  /* 390 px : le bloc central passe pleine largeur sous la rangée du haut. */
+  .hud-top-center {
+    left: 8px;
+    right: 8px;
+    transform: none;
+    top: 122px;
+    gap: 4px;
+    padding: 6px;
+  }
+
+  #hud button {
+    padding: 3px 7px;
+  }
+}
