@@ -28,6 +28,7 @@ import {
   updateCarLight,
   ghostifyCar,
 } from './voiture.js';
+import { createTwinkles, drawTwinkles } from './glace.js';
 import { normalizeSeed } from './utils.js';
 
 /** cos(angle) < FLIP_COS ⇒ retourné (≈ ±100°, toit vers le bas). */
@@ -54,9 +55,13 @@ export class Game {
     this.ui = { toast: () => {}, flip: () => {}, hint: () => {}, ...ui };
 
     this.routeGfx = new PIXI.Graphics();
+    this.twinkleGfx = new PIXI.Graphics();
     this.carLayer = new PIXI.Container();
     this.layer.addChild(this.routeGfx);
+    this.layer.addChild(this.twinkleGfx);
     this.layer.addChild(this.carLayer);
+    this.twinkles = createTwinkles(36, 7, -600, 11400);
+    this.twinkleT = Math.random() * 20;
 
     this.state = 'ready';
     this.distance = 0;
@@ -102,8 +107,12 @@ export class Game {
     }
     this.route = generateRoute(this.seed, this.difficulty);
     this.routeHandle = buildRouteColliders(this.world, this.route.points);
+    const pts = this.route.points;
+    // Scintillements ancrés dans la glace sur toute la route (monde absolu).
+    this.twinkles = createTwinkles(36, this.seed, pts[0].x, pts[pts.length - 1].x);
     this.routeGfx.clear();
-    drawRoute(this.routeGfx, this.route.points, this.difficulty);
+    drawRoute(this.routeGfx, this.route.points, this.difficulty, this.seed);
+    this.twinkleGfx.clear();
     this.spawnNewCar(null);
     return { seed: this.seed, difficulty: this.difficulty };
   }
@@ -135,6 +144,10 @@ export class Game {
     this.carLayer.addChildAt(this.car.washMesh, 0);
     this.carLayer.addChildAt(this.car.fanMesh, 1);
     this.carLayer.addChildAt(this.car.dustMesh, 2);
+    // Blobs d'ombre (sprites) : sous la voiture, ajoutés en tête.
+    for (const s of [this.car.shadowSpr1, this.car.shadowSpr2]) {
+      if (s) this.carLayer.addChildAt(s, 0);
+    }
     this.carLayer.addChild(this.car.container);
     syncCarVisual(this.car);
     this.state = 'ready';
@@ -244,6 +257,23 @@ export class Game {
     if (!this.car) return;
     syncCarVisual(this.car, alpha);
     updateCarLight(this.car, dt, this.route ? this.route.points : null);
+  }
+
+  /**
+   * Glace animée par frame : scintillements autour de la caméra (l'ombre et
+   * la nappe sont des sprites portés par la voiture, cf. voiture.js).
+   * @param {number} dt Delta temps rendu (s).
+   * @param {number} camX Caméra X monde.
+   * @param {number} viewW Largeur viewport monde.
+   * @returns {void}
+   */
+  updateIce(dt, camX, viewW) {
+    if (!this.route) return;
+    const step = Math.min(0.1, Math.max(0, dt || 0));
+    if (step > 0) this.twinkleT += step;
+    const cx = Number.isFinite(camX) ? camX : this.carX;
+    const vw = Number.isFinite(viewW) && viewW > 0 ? viewW : 2600;
+    drawTwinkles(this.twinkleGfx, this.twinkles, this.twinkleT, cx, vw, this.route.points);
   }
 
   /**

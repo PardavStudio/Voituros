@@ -34,7 +34,7 @@
 
 ### 3.2 Monde & route procédurale
 
-* La route est **une ligne** (rendue comme trait épais lumineux + remblai sombre), **continue, dérivable par morceaux, sans trous ni sauts verticaux**, de longueur fixe `TRACK_LENGTH = 12000 px` (≈ 1200 m à `PX_PER_M = 10`).
+* La route est **une ligne** (rendue comme dalle de glace, **sans trait**), **continue, dérivable par morceaux, sans trous ni sauts verticaux**, de longueur fixe `TRACK_LENGTH = 12000 px` (≈ 1200 m à `PX_PER_M = 10`).
 * Origine : zone plate de 400 px à `x ∈ [−200, 200]` à `y=0` pour le spawn.
 * **Algorithme imposé (cohérent + difficulté) : somme de sinusoïdes seedées + bruit de valeur 1D lissé (fBm léger).**
   * RNG seedé `mulberry32(seed)` — même seed ⇒ même route.
@@ -56,7 +56,7 @@
     | Épaisseur visuelle route | 10px | 10px | 10px |
   * Échantillonnage : un point tous les `DX = 20 px` ⇒ ~600 points pour 12000 px. Pente clampée : si `|dy/dx|` dépasse `tan(penteMax)`, on écrête `dy` (garantit carrossabilité + cohérence). Limiteur de courbure (Δdy ≤ `DX·tan(10°)` par pas) + 2 passes binomiales : aucun angle dur aux joints (cassures ≤ ~10°), sans changer l'échantillonnage ni le déterminisme.
   * Colliders Rapier : pour chaque segment `[p_i, p_{i+1}]`, un `ColliderDesc.cuboid(halfLen, thickness/2)` positionné au milieu, rotaté à l'angle du segment. `thickness = 20px`, `friction = 1.2`, `restitution = 0`. Corps `fixed()`. Groupe de collision route = 0x0001.
-  * Rendu Pixi : (a) remblai : polygone sous la ligne (jusqu'à +2000px vers le bas) couleur `#141a26`, (b) ligne : `Graphics.polyline` épaisseur 6px couleur par difficulté (Easy `#34d399`, Medium `#60a5fa`, Hard `#f472b6`), glow léger via second trait alpha 0.25 épaisseur 12px. Départ : drapeau / marquage blanc à x=0. Distance markers tous les 100 m (petits ticks + label `100m`, …).
+  * Rendu Pixi (`src/glace.js`, baké 1×/route) : dalle de glace (dégradé surface pâle → bleu profond + abîme sombre, teinte subtile par difficulté), fissures en marche aléatoire branchue + arêtes de pression, bulles d'air piégées, étincelles baked + cristaux dendritiques posés, dashes de reflet (jamais de trait continu) ; animé par frame : 36 scintillements recyclés autour de la caméra + nappe spéculaire froide du phare. Neige écran (`src/neige.js`, 220 flocons, 3 couches + sway + rafales). Départ : drapeau / marquage blanc à x=0. Distance markers tous les 100 m (petits ticks + label `100m`, …).
 * API attendue `src/route.js` : `generateRoute(seed, difficulty) → { points: [{x,y}], seed, difficulty }`, `buildRouteColliders(world, points) → void`, `drawRoute(graphics, points, difficulty) → void`, `routeYAt(points, x) → y` (interpolation linéaire). Exporter `DIFFICULTIES`, `TRACK_LENGTH`, `PX_PER_M`.
 
 ### 3.3 Voiture aléatoire (1 voiture / player, V1 = 1 player local)
@@ -74,8 +74,7 @@
   * suivant la chaussée sous l'empreinte ; 44 poussières advectées (vent
   * relatif + scintillement, clippées au polygone de visibilité : jamais
   * sous le sol) ; micro-flicker de lampe ; éteint sur épaves.
-  * 2 roues : cercles dark `#1f2937` + jante unie `#9ca3af` + moyeu `#4b5563`
-  * (pas de marqueur de rotation). Rayon random 14–24 px. Empattement (spacing) 55–95 px (distance entre centres des roues, symétrique ± autour du centre châssis, ancrage à −10px sous le châssis).
+  * 2 roues : pneu en dégradé (flanc éclairé en haut) + jante alliage 5 branches biseautées (métal = celui de la peinture) + moyeu + écrous, sans contour. Les branches rendent la rotation visible (physique). Rayon random 14–24 px. Empattement (spacing) 55–95 px (distance entre centres des roues, symétrique ± autour du centre châssis, ancrage à −10px sous le châssis).
 * Physique Rapier imposée :
   * Châssis : `RigidBodyDesc.dynamic().setTranslation(spawnX, spawnY).setAngvel(0).lockTranslations? NON` + `ColliderDesc.convexHull(vertices)` (fallback cuboid si hull échoue), `density 1.0`, `friction 0.6`, `restitution 0.05`, `ccdEnabled true`.
   * Roues : 2× `RigidBodyDesc.dynamic()` + `ColliderDesc.ball(radius)` `density 1.2`, `friction 1.5`, `restitution 0.1`, `frictionCombineRule Average`.
@@ -129,8 +128,8 @@
 * plan galactique projeté en vraies coordonnées J2000 : Triangle d'été, Croix
 * du Nord et ~10 étoiles brillantes à leurs positions exactes, Grand Rift avec
 * extinction, ~400 étoiles ; dérive lente 3 px/s + parallaxe caméra 0.03,
-* tuile 2048×1024 statique instanciée 3×3, zéro redraw). Route néon (cf. §3.2), voiture low-poly vive + phare jaune + faisceau. Tombes grises. Typo système/monospace. Pas d'images externes.
-* Pixi 8 : `new PIXI.Application()`, `await app.init({ background, resizeTo: window })`, `app.ticker.add(loop)`. `Graphics` pour route/remblai/voiture (redraw châssis une fois, roues via `Graphics` repositionnés chaque frame — pas de recréation par frame).
+* tuile 2048×1024 statique instanciée 3×3, zéro redraw). Glace + neige (cf. §3.2), voiture low-poly vive + phare jaune + faisceau. Tombes grises. Typo système/monospace. Pas d'images externes.
+* Pixi 8 : `new PIXI.Application()`, `await app.init({ background, resizeTo: window })`, `app.ticker.add(loop)`. `Graphics` pour glace/voiture (redraw châssis une fois, roues via `Graphics` repositionnés chaque frame — pas de recréation par frame).
 * Sync visuel : chaque frame, `sprite.position.copyFrom(body.translation())`, `sprite.rotation = body.rotation()` (conversion px direct, Rapier2D-compat en unités monde = px ici).
 
 ## 4. Exigences non-fonctionnelles
@@ -148,6 +147,8 @@
 /src/main.js           — boot Pixi + Rapier.init(), boucle, câblage HUD/inputs
 /src/game.js           — classe Game : état (ready|driving|flipped|dead), distance, best, graves, respawn
 /src/route.js          — génération + colliders + rendu + routeYAt + DIFFICULTIES
+/src/glace.js            — dalle de glace + fissures + cristaux + scintillements + reflet phare
+/src/neige.js            — chute de neige écran (3 couches, sway, rafales)
 /src/voiture.js        — randomCarSpec + createCar + applyDrive + sync meshes
 /src/peinture.js         — randomPaint + drawPaint/drawGlint (peinture + reflet, sans contour)
 /src/engine.js           — moteur audio Greenwood (boîte auto, crossfade RPM/charge)
@@ -199,7 +200,7 @@
   6. `respawn-new-car` — après mort, attendre 2s ⇒ `distance` repart ~0, `carSpec` différent (couleur/verts), caméra revenue au départ.
   7. `camera-follow` — rouler 5s ⇒ `|carScreenX − viewportCenterX| < 40% viewport` (via `__VOITUROS__.screenInfo()`), screenshot `camera.png`.
 * Hooks debug exposés : `window.__VOITUROS__ = { carX(), difficulty, graves, deaths, distance, carSpec, screenInfo(), debugFlip(), teleport(x), reset() }`. Interdits en prod hors tests ? Tolérés, préfixés `debug`, documentés.
-* Validation screenshots : analyser visuellement (route néon sur fond dark, voiture low-poly + phare, tombe `💀 XX m`, HUD lisible). Si écart ⇒ corriger et relancer.
+* Validation screenshots : analyser visuellement (glace bleue + neige sur fond dark, voiture + phare, tombe `💀 XX m`, HUD lisible). Si écart ⇒ corriger et relancer.
 
 ## 10. Risques & mitigations
 

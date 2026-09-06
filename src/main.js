@@ -8,6 +8,9 @@ import { Game } from './game.js';
 import { createCamera } from './camera.js';
 import { createSky } from './sky.js';
 import { createEngineAudio, wireEngineUI } from './engine.js';
+import { createSnow, drawSnow } from './neige.js';
+import { beamLight } from './voiture.js';
+import { routeYAt } from './route.js';
 
 const STEP = 1 / 120;
 const $ = (id) => document.getElementById(id);
@@ -63,6 +66,23 @@ async function boot() {
   const worldLayer = new PIXI.Container();
   app.stage.addChild(worldLayer);
   const camera = createCamera(app, worldLayer);
+
+  // Neige (espace écran, au-dessus du monde, sous le HUD DOM).
+  const snowLayer = new PIXI.Container();
+  app.stage.addChild(snowLayer);
+  const snowGfx = new PIXI.Graphics();
+  snowLayer.addChild(snowGfx);
+  const snow = createSnow(7);
+  // Contexte monde pour la neige (pré-alloué, muté par frame : zéro alloc) :
+  // la neige est éclairée par le faisceau et clipsée sous le terrain.
+  const snowEnv = {
+    camVX: 0,
+    camX: 0,
+    camY: 0,
+    zoom: 1,
+    beam: (wx, wy) => (game.car ? beamLight(game.car, wx, wy) : 0),
+    groundY: (wx) => (game.route ? routeYAt(game.route.points, wx) : 1e9),
+  };
 
   // HUD.
   const elDist = $('hud-distance');
@@ -140,6 +160,17 @@ async function boot() {
   const engineUI = wireEngineUI(engine, $('btn-mute'));
   applyRoute(settings.seed, settings.difficulty, null);
   showHint(4);
+  // Splash titre : masqué après ~2.6 s ou dès le premier geste.
+  const splashEl = $('splash');
+  let splashHidden = false;
+  const hideSplash = () => {
+    if (splashHidden || !splashEl) return;
+    splashHidden = true;
+    splashEl.classList.add('hide');
+  };
+  setTimeout(hideSplash, 2600);
+  window.addEventListener('keydown', hideSplash, { once: true, passive: true });
+  window.addEventListener('pointerdown', hideSplash, { once: true, passive: true });
 
   // Inputs (priorité au dernier en appui simultané, 0 au relâchement).
   const held = { left: false, right: false };
@@ -310,6 +341,7 @@ async function boot() {
   let acc = 0;
   let prev = performance.now();
   let muteTick = 0;
+  let prevCamX = 0;
   app.ticker.add(() => {
     const now = performance.now();
     const dt = Math.min((now - prev) / 1000, 0.1);
@@ -328,6 +360,15 @@ async function boot() {
     game.frame(Math.min(1, Math.max(0, acc / STEP)), dt);
     camera.update(dt, { x: game.carX, y: game.carY }, game.carVel);
     sky.update(dt, camera.camX, camera.camY);
+    // Glace animée (scintillements + reflet phare) + neige écran.
+    game.updateIce(dt, camera.camX, (app.screen.width || innerWidth) / (camera.zoom || 1));
+    const camVX = dt > 0 ? (camera.camX - prevCamX) / dt : 0;
+    prevCamX = camera.camX;
+    snowEnv.camVX = camVX;
+    snowEnv.camX = camera.camX;
+    snowEnv.camY = camera.camY;
+    snowEnv.zoom = camera.zoom || 1;
+    drawSnow(snowGfx, snow, dt, app.screen.width || innerWidth, app.screen.height || innerHeight, camVX, snowEnv);
     // Moteur Greenwood : RPM via rapports (dents de scie), charge = gaz,
     // roues libres quand retourné (ça mouline), coupé si mort.
     engine.update(dt, {

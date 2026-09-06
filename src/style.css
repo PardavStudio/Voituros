@@ -186,6 +186,53 @@ body {
   padding: 6px 12px;
 }
 
+/* Splash titre (boot) : vrai titre en jeu, style glace. Disparaît après
+   ~2.6 s ou au premier geste (pointer-events: none : jamais bloquant). */
+#splash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 15;
+  opacity: 1;
+  transition: opacity 0.6s;
+}
+
+#splash.hide {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.6s,
+    visibility 0s 0.6s;
+}
+
+.splash-title {
+  font-weight: 900;
+  font-size: clamp(48px, 9vw, 110px);
+  letter-spacing: 0.18em;
+  margin-right: -0.18em;
+  color: #eaf6fe;
+  text-shadow:
+    0 0 14px rgba(200, 230, 255, 0.9),
+    0 0 42px rgba(127, 184, 217, 0.65),
+    0 3px 0 #2a5a86,
+    0 5px 0 rgba(10, 30, 50, 0.9);
+}
+
+.splash-sub {
+  font-size: clamp(12px, 2vw, 18px);
+  letter-spacing: 0.32em;
+  margin-right: -0.32em;
+  color: #cfe5f5;
+  text-shadow:
+    0 0 12px rgba(159, 212, 255, 0.8),
+    0 2px 0 rgba(18, 63, 102, 0.9);
+}
+
 .hidden {
   display: none !important;
 }

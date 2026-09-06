@@ -7,7 +7,7 @@
 import RAPIER from '@dimforge/rapier2d-compat';
 import * as PIXI from 'pixi.js';
 import { routeYAt } from './route.js';
-import { randomPaint, drawPaint, drawGlint } from './peinture.js';
+import { randomPaint, drawPaint, drawGlint, shade } from './peinture.js';
 
 /** Palette historique des teintes vives (conservée pour compat, la peinture
  * procédurale de peinture.js a pris le relais). */
@@ -79,17 +79,79 @@ export function randomCarSpec(rng) {
 export const GRAVE_PAINT = { base: '#6b7280', secondary: '#4b5563', pattern: 'solid', metal: 0, pearl: 0, seed: 0 };
 
 /**
- * Dessine une roue (pneu + jante unie, sans marqueur : rotation non visible).
+ * Dessine une roue réaliste (homogène avec la carrosserie) : pneu en dégradé
+ * (flanc éclairé en haut), jante alliage 5 branches (le métal suit celui de
+ * la peinture), moyeu + écrous. Que des aplats, aucun contour. Les branches
+ * rendent la rotation visible (physique, pas de marqueur artificiel).
  * @param {PIXI.Graphics} g Graphics cible.
  * @param {number} r Rayon.
- * @param {string} tire Couleur du pneu.
+ * @param {{ metal: number }} paint Peinture (métal des branches).
  * @returns {void}
  */
-function drawWheel(g, r, tire) {
+function drawWheel(g, r, paint) {
   g.clear();
-  g.circle(0, 0, r).fill({ color: tire });
-  g.circle(0, 0, r * 0.55).fill({ color: '#9ca3af' });
-  g.circle(0, 0, r * 0.22).fill({ color: '#4b5563' });
+  const metal = paint?.metal ?? 0.6;
+  // Pneu : flanc éclairé en haut, gomme quasi noire en bas.
+  const tg = new PIXI.FillGradient({
+    type: 'linear',
+    start: { x: 0.5, y: 0 },
+    end: { x: 0.5, y: 1 },
+    textureSpace: 'local',
+    colorStops: [
+      { offset: 0, color: '#3a4353' },
+      { offset: 0.55, color: '#161b22' },
+      { offset: 1, color: '#07090d' },
+    ],
+  });
+  g.circle(0, 0, r).fill({ fill: tg });
+  // Bande de roulement (anneau externe légèrement plus clair en haut).
+  g.circle(0, 0, r * 0.97).fill({ color: '#1d232c', alpha: 0.55 });
+  // Lèvre polie (anneau fin clair = lecture du bord de jante).
+  const rimR = r * 0.62;
+  g.circle(0, 0, rimR + 0.8).fill({ color: '#d5dae2', alpha: 0.9 });
+  // Puits de jante sombre.
+  g.circle(0, 0, rimR - 0.8).fill({ color: '#0b0e13' });
+  // Disque de frein (gris moyen + trous).
+  g.circle(0, 0, rimR * 0.8).fill({ color: '#5b636e' });
+  for (let k = 0; k < 6; k++) {
+    const a = (k * Math.PI * 2) / 6 + 0.5;
+    g.circle(Math.cos(a) * rimR * 0.55, Math.sin(a) * rimR * 0.55, Math.max(1, r * 0.022));
+    g.fill({ color: '#2c333d' });
+  }
+  // 5 branches alliage (argent moyen, jamais blanc pur : sinon starburst ;
+  // luminosité = métal de la peinture ; biseau sans contour).
+  const spoke = shade('#c2c8d1', -22 + 20 * metal);
+  const spokeDark = shade('#7d848f', -20 + 16 * metal);
+  const quads = [];
+  for (let k = 0; k < 5; k++) {
+    const a = (k * Math.PI * 2) / 5;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    const px = -sa;
+    const py = ca;
+    quads.push([ca, sa, px, py]);
+  }
+  for (const [wd, col] of [[1.35, spokeDark], [1.0, spoke]]) {
+    for (const [ca, sa, px, py] of quads) {
+      const r0 = r * 0.16;
+      const r1 = rimR * 0.92;
+      const wdt = r * 0.075 * wd;
+      g.moveTo(ca * r0 - px * wdt, sa * r0 - py * wdt);
+      g.lineTo(ca * r1 - px * wdt * 1.25, sa * r1 - py * wdt * 1.25);
+      g.lineTo(ca * r1 + px * wdt * 1.25, sa * r1 + py * wdt * 1.25);
+      g.lineTo(ca * r0 + px * wdt, sa * r0 + py * wdt);
+      g.closePath();
+      g.fill({ color: col });
+    }
+  }
+  // Moyeu + cache + écrous.
+  g.circle(0, 0, r * 0.15).fill({ color: '#3a414c' });
+  for (let k = 0; k < 5; k++) {
+    const a = (k * Math.PI * 2) / 5 + 0.3;
+    g.circle(Math.cos(a) * r * 0.1, Math.sin(a) * r * 0.1, Math.max(1, r * 0.025));
+    g.fill({ color: '#c9ced6' });
+  }
+  g.circle(0, 0, r * 0.06).fill({ color: '#e8ebf0' });
 }
 
 /**
@@ -234,13 +296,29 @@ export function createCar(world, spec, spawn) {
   const lightGroup = new PIXI.Container();
   lightGroup.position.set(noseX - 2, 0);
   const lampMesh = new PIXI.Graphics();
-  lampMesh.circle(0, 0, 11).fill({ color: '#ffedb0', alpha: 0.5 });
   lampMesh.blendMode = 'add';
-  lampMesh.circle(0, 0, 4).fill({ color: '#fff7d6' });
+  // Sphère de halo + cœur incandescent (uniquement).
+  lampMesh.circle(0, 0, 8).fill({ color: '#ffe9b8', alpha: 0.4 });
+  lampMesh.circle(0, 0, 3.6).fill({ color: '#fffef8', alpha: 0.95 });
   lightGroup.addChild(lampMesh);
   container.addChild(lightGroup);
   const fanMesh = new PIXI.Graphics();
   fanMesh.blendMode = 'add';
+  // Ombre : sprites à blob radial (flou cuit en texture). Pas de nappe au
+  // sol (retirée à la demande : le faisceau + poussières portent la lumière).
+  let shadowSpr1 = null;
+  let shadowSpr2 = null;
+  try {
+    shadowTex = shadowTex || makeBlobTexture('4,7,13');
+    if (shadowTex) {
+      shadowSpr1 = new PIXI.Sprite(shadowTex);
+      shadowSpr1.anchor.set(0.5);
+      shadowSpr2 = new PIXI.Sprite(shadowTex);
+      shadowSpr2.anchor.set(0.5);
+    }
+  } catch {
+    shadowSpr1 = shadowSpr2 = null;
+  }
   const washMesh = new PIXI.Graphics();
   washMesh.blendMode = 'add';
   const dustMesh = new PIXI.Graphics();
@@ -262,7 +340,7 @@ export function createCar(world, spec, spawn) {
 
   const wheelMeshes = anchors.map((a, i) => {
     const mesh = new PIXI.Graphics();
-    drawWheel(mesh, r, '#1f2937');
+    drawWheel(mesh, r, spec.paint);
     mesh.position.set(a.x, a.y);
     container.addChild(mesh);
     return { mesh, anchor: a, body: wheels[i].body, axle: axles[i].body, k: cornerKC[i].k, c: cornerKC[i].c };
@@ -279,6 +357,8 @@ export function createCar(world, spec, spawn) {
     container,
     bodyMesh,
     glintMesh,
+    shadowSpr1,
+    shadowSpr2,
     wheelMeshes,
     suspTravel: [0, 0],
     dead: false,
@@ -329,12 +409,21 @@ export function destroyCar(world, car, opts = {}) {
     }
   }
   if (!opts.keepVisual) car.container.destroy({ children: true });
-  // Éclairage monde (fan/wash/dust vivent dans le carLayer) : toujours
-  // retiré, même pour les tombes (phare éteint sur les épaves).
+  // Éclairage monde (fan/wash/dust + sprites blobs vivent dans le carLayer).
+  // Les sprites partagent les textures du module : removeFromParent suffit
+  // (jamais de destroy de texture partagée).
   for (const m of [car.fanMesh, car.washMesh, car.dustMesh]) {
     try {
       m?.removeFromParent();
       m?.destroy();
+    } catch {
+      /* déjà nettoyé */
+    }
+  }
+  for (const s of [car.shadowSpr1, car.shadowSpr2]) {
+    try {
+      s?.removeFromParent();
+      s?.destroy();
     } catch {
       /* déjà nettoyé */
     }
@@ -641,6 +730,62 @@ export function castFan(lx, ly, aim, half, count, range, edges, out) {
   return out;
 }
 
+/** Blob radial doux partagé (ombre) : baked une fois en canvas 2D.
+ * @type {PIXI.Texture|null} */
+let shadowTex = null;
+
+/**
+ * Texture de blob radial (centre opaque → transparent).
+ * @param {string} rgb Composantes `r,g,b` (ex. `'255,233,196'`).
+ * @returns {PIXI.Texture|null} Texture (null si canvas indisponible).
+ */
+function makeBlobTexture(rgb) {
+  try {
+    const S = 128;
+    const cv = document.createElement('canvas');
+    cv.width = S;
+    cv.height = S;
+    const ctx2d = cv.getContext('2d');
+    if (!ctx2d) return null;
+    const grd = ctx2d.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    grd.addColorStop(0, `rgba(${rgb},1)`);
+    grd.addColorStop(0.4, `rgba(${rgb},0.45)`);
+    grd.addColorStop(1, `rgba(${rgb},0)`);
+    ctx2d.fillStyle = grd;
+    ctx2d.fillRect(0, 0, S, S);
+    return PIXI.Texture.from(cv);
+  } catch {
+    return null;
+  }
+}
+export function beamLight(car, wx, wy) {
+  try {
+    if (!car || car.dead || !car.fanHits) return 0;
+    const pos = car.container.position;
+    const angle = car.container.rotation;
+    const cb = Math.cos(angle);
+    const sb = Math.sin(angle);
+    const lx = pos.x + cb * (car.noseX - 2);
+    const ly = pos.y + sb * (car.noseX - 2);
+    const dx = wx - lx;
+    const dy = wy - ly;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 1 || dist > FAN_RANGE) return 0;
+    const aim = angle + LIGHT_PITCH;
+    const rel = (Math.atan2(dy, dx) - aim) / (2 * FAN_HALF) + 0.5;
+    if (rel < 0 || rel > 1) return 0;
+    const fi = rel * (FAN_RAYS - 1);
+    const i0 = fi <= 0 ? 0 : fi >= FAN_RAYS - 1 ? FAN_RAYS - 2 : Math.floor(fi);
+    const fr = fi - i0;
+    const maxR = car.fanHits[i0] * (1 - fr) + car.fanHits[i0 + 1] * fr;
+    if (maxR <= 0 || dist > maxR) return 0;
+    const prof = Math.cos((rel - 0.5) * Math.PI);
+    return Math.max(0, prof * prof) * falloff(dist / FAN_RANGE);
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Atténuation spot classique : 1 / (c + l·d + q·d²), d = distance / portée.
  * @param {number} f Fraction de portée [0, 1].
@@ -726,29 +871,35 @@ export function updateCarLight(car, dt, routePoints) {
   const fan = car.fanMesh;
   fan.clear();
   const last = FAN_RAYS - 1;
-  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 0, last, 1, '#ffe9b8', 0.06 * flick);
-  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 6, last - 6, 1, '#ffe9b8', 0.06 * flick);
-  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 14, last - 14, 1, '#ffe9b8', 0.075 * flick);
-  // Nappe : suit la chaussée sous l'empreinte du faisceau (impacts réels).
+  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 0, last, 1, '#ffe9b8', 0.03 * flick);
+  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 6, last - 6, 1, '#ffe9b8', 0.035 * flick);
+  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 14, last - 14, 1, '#fff0cf', 0.05 * flick);
+  // Pas de nappe au sol : le faisceau + les poussières portent la lumière.
+  // (washMesh conservé vide pour compatibilité du layer.)
   const wash = car.washMesh;
   wash.clear();
-  let hx0 = Infinity;
-  let hx1 = -Infinity;
-  for (let i = 0; i < FAN_RAYS; i++) {
-    if (hits[i] < FAN_RANGE - 1) {
-      const px = lx + fanCos[i] * hits[i];
-      if (px < hx0) hx0 = px;
-      if (px > hx1) hx1 = px;
-    }
+  // Ombre de contact : 2 blobs sombres sous la caisse, PIVOTÉS selon la
+  // pente locale (l'ombre épouse le terrain — jamais un rectangle).
+  // carX est déjà lisse par la physique : aucun grouillement.
+  const sx = pos.x;
+  const sy = routeYAt(routePoints, sx) + 7;
+  const slope = Math.atan2(
+    routeYAt(routePoints, sx + 40) - routeYAt(routePoints, sx - 40),
+    80,
+  );
+  if (car.shadowSpr1) {
+    car.shadowSpr1.visible = show;
+    car.shadowSpr1.position.set(sx, sy);
+    car.shadowSpr1.rotation = slope;
+    car.shadowSpr1.scale.set(95 / 64, 15 / 64);
+    car.shadowSpr1.alpha = 0.5;
   }
-  if (hx1 - hx0 > 15) {
-    const xA = Math.max(hx0 - 6, lx - 10);
-    wash.moveTo(xA, routeYAt(routePoints, xA) - 2.5);
-    for (let x = xA + 9; x <= hx1 + 6; x += 9) wash.lineTo(x, routeYAt(routePoints, x) - 2.5);
-    wash.stroke({ width: 9, color: '#ffd88f', alpha: 0.16 * flick });
-    wash.moveTo(xA, routeYAt(routePoints, xA) - 2.5);
-    for (let x = xA + 9; x <= hx1 + 6; x += 9) wash.lineTo(x, routeYAt(routePoints, x) - 2.5);
-    wash.stroke({ width: 3.5, color: '#ffe9b8', alpha: 0.2 * flick });
+  if (car.shadowSpr2) {
+    car.shadowSpr2.visible = show;
+    car.shadowSpr2.position.set(sx, sy - 1);
+    car.shadowSpr2.rotation = slope;
+    car.shadowSpr2.scale.set(58 / 64, 9 / 64);
+    car.shadowSpr2.alpha = 0.65;
   }
   // Poussières : advectées par le vent relatif (vitesse voiture projetée sur
   // l'axe) + dérive propre, brillance = intensité locale × scintillement.
@@ -814,10 +965,10 @@ export function ghostifyCar(world, car) {
   }
   drawPaint(car.bodyMesh, car.spec, GRAVE_PAINT);
   if (car.glintMesh) car.glintMesh.visible = false; // pas de reflet sur une épave
-  for (const { mesh } of car.wheelMeshes) drawWheel(mesh, car.spec.wheelRadius, '#374151');
+  for (const { mesh } of car.wheelMeshes) drawWheel(mesh, car.spec.wheelRadius, { metal: 0 });
   car.container.alpha = 0.55;
   if (car.lightGroup) car.lightGroup.visible = false;
-  for (const m of [car.fanMesh, car.washMesh, car.dustMesh]) {
+  for (const m of [car.fanMesh, car.washMesh, car.dustMesh, car.shadowSpr1, car.shadowSpr2]) {
     if (m) m.visible = false;
   }
   car.dead = true;

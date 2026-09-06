@@ -6,6 +6,7 @@
 import RAPIER from '@dimforge/rapier2d-compat';
 import * as PIXI from 'pixi.js';
 import { mulberry32, normalizeSeed, clamp, smoothstep } from './utils.js';
+import { drawIce } from './glace.js';
 
 /** Longueur totale de la piste en px. */
 export const TRACK_LENGTH = 12000;
@@ -164,34 +165,17 @@ export function clearRouteColliders(world, handle) {
 }
 
 /**
- * Dessine la route : remblai sombre, glow, ligne néon, drapeau de départ,
- * ticks + labels tous les 100 m (labels ajoutés au parent, taggés 'route-decor').
+ * Dessine la route : dalle de glace (cf. glace.js — fini le trait néon),
+ * drapeau de départ, ticks + labels tous les 100 m (labels ajoutés au
+ * parent, taggés 'route-decor').
  * @param {PIXI.Graphics} graphics Graphics à dessiner (déjà enfant d'un Container monde).
  * @param {Array<{x:number,y:number}>} points Points échantillonnés.
- * @param {unknown} difficulty Difficulté (couleur de la ligne).
+ * @param {unknown} difficulty Difficulté (teinte de la glace).
+ * @param {unknown} [seed] Graine (fissures/bulles déterministes).
  * @returns {void}
  */
-export function drawRoute(graphics, points, difficulty) {
-  const P = DIFFICULTIES[normalizeDifficulty(difficulty)];
-  const n = points.length;
-
-  // (a) Remblai : polygone sous la ligne (+2000px vers le bas).
-  graphics.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < n; i++) graphics.lineTo(points[i].x, points[i].y);
-  graphics.lineTo(points[n - 1].x, points[n - 1].y + 2000);
-  graphics.lineTo(points[0].x, points[0].y + 2000);
-  graphics.closePath();
-  graphics.fill({ color: '#141a26' });
-
-  // (b) Glow + ligne néon.
-  for (const style of [
-    { width: 12, alpha: 0.25 },
-    { width: 6, alpha: 1 },
-  ]) {
-    graphics.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < n; i++) graphics.lineTo(points[i].x, points[i].y);
-    graphics.stroke({ width: style.width, color: P.color, alpha: style.alpha });
-  }
+export function drawRoute(graphics, points, difficulty, seed = 1) {
+  drawIce(graphics, points, difficulty, seed);
 
   // Drapeau / marquage de départ à x=0.
   const y0 = routeYAt(points, 0);
