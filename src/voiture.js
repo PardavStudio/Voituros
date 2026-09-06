@@ -7,8 +7,10 @@
 import RAPIER from '@dimforge/rapier2d-compat';
 import * as PIXI from 'pixi.js';
 import { routeYAt } from './route.js';
+import { randomPaint, drawPaint, drawGlint } from './peinture.js';
 
-/** Palette néon sombre des carrosseries. */
+/** Palette historique des teintes vives (conservée pour compat, la peinture
+ * procédurale de peinture.js a pris le relais). */
 export const PALETTE = ['#f43f5e', '#f59e0b', '#22d3ee', '#a78bfa', '#a3e635', '#f472b6'];
 /**
  * Groupes de collision (membership << 16 | filter) : les roues ne doivent
@@ -48,14 +50,15 @@ export const WHEEL_ANGULAR_DAMPING = 0.45;
 /**
  * Génère une spec de voiture aléatoire (déterministe si rng seedé).
  * @param {() => number} rng RNG dans [0, 1).
- * @returns {{ bodyVerts: Array<{x:number,y:number}>, wheelRadius: number, wheelBase: number, color: string, bodyLen: number, bodyH: number }}
+ * @returns {{ bodyVerts: Array<{x:number,y:number}>, wheelRadius: number, wheelBase: number, color: string, bodyLen: number, bodyH: number, paint: import('./peinture.js').Paint }}
  */
 export function randomCarSpec(rng) {
   const L = 70 + rng() * 40; // longueur 70–110 px
   const H = 22 + rng() * 16; // hauteur 22–38 px
   const wheelRadius = 14 + rng() * 10; // rayon 14–24 px
   const wheelBase = Math.min(55 + rng() * 40, L - 14); // empattement, borné à la caisse
-  const color = PALETTE[Math.floor(rng() * PALETTE.length)];
+  const paint = randomPaint(rng);
+  const color = paint.base; // compat : teinte principale
   // Silhouette anguleuse 7 sommets (repère local : +X avant, +Y bas).
   const j = () => (rng() - 0.5) * 4;
   const bodyVerts = [
@@ -67,25 +70,13 @@ export function randomCarSpec(rng) {
     { x: -L * 0.28 + j(), y: -H * 0.5 },
     { x: -L / 2, y: -H * 0.1 + j() },
   ];
-  return { bodyVerts, wheelRadius, wheelBase, color, bodyLen: L, bodyH: H };
+  return { bodyVerts, wheelRadius, wheelBase, color, bodyLen: L, bodyH: H, paint };
 }
 
 /**
- * Dessine la carrosserie dans un Graphics (repère local voiture).
- * @param {PIXI.Graphics} g Graphics cible.
- * @param {{ bodyVerts: Array<{x:number,y:number}> }} spec Spec voiture.
- * @param {string} color Couleur de remplissage.
- * @returns {void}
+ * Peinture grise d'épave (tombe : même système, teinte ciment, sans motif).
  */
-function drawBody(g, spec, color) {
-  g.clear();
-  const v = spec.bodyVerts;
-  g.moveTo(v[0].x, v[0].y);
-  for (let i = 1; i < v.length; i++) g.lineTo(v[i].x, v[i].y);
-  g.closePath();
-  g.fill({ color });
-  g.stroke({ width: 2, color: '#e5e7eb' });
-}
+export const GRAVE_PAINT = { base: '#6b7280', secondary: '#4b5563', pattern: 'solid', metal: 0, pearl: 0, seed: 0 };
 
 /**
  * Dessine une roue (pneu + jante unie, sans marqueur : rotation non visible).
@@ -110,9 +101,9 @@ function drawWheel(g, r, tire) {
  * libre pour la propulsion). Le ressort/amortisseur manuel agit le long de
  * l'axe compliant ⇒ aucun conflit avec le solveur (stable).
  * @param {import('@dimforge/rapier2d-compat').World} world Monde Rapier.
- * @param {{ bodyVerts: Array<{x:number,y:number}>, wheelRadius: number, wheelBase: number, color: string, bodyLen: number, bodyH: number }} spec Spec voiture.
+ * @param {{ bodyVerts: Array<{x:number,y:number}>, wheelRadius: number, wheelBase: number, color: string, bodyLen: number, bodyH: number, paint: object }} spec Spec voiture (inclut `paint`, cf. peinture.js).
  * @param {{ x: number, y: number }} spawn Position de spawn.
- * @returns {{ chassis: import('@dimforge/rapier2d-compat').RigidBody, wheelF: import('@dimforge/rapier2d-compat').RigidBody, wheelR: import('@dimforge/rapier2d-compat').RigidBody, axles: Array, joints: Array, colliders: Array, spec: object, container: PIXI.Container, bodyMesh: PIXI.Graphics, wheelMeshes: Array<{mesh:PIXI.Graphics,anchor:{x:number,y:number},body:object,axle:object,k:number,c:number}>, suspTravel: Array<number>, dead: boolean }}
+ * @returns {{ chassis: import('@dimforge/rapier2d-compat').RigidBody, wheelF: import('@dimforge/rapier2d-compat').RigidBody, wheelR: import('@dimforge/rapier2d-compat').RigidBody, axles: Array, joints: Array, colliders: Array, spec: object, container: PIXI.Container, bodyMesh: PIXI.Graphics, glintMesh: PIXI.Graphics, wheelMeshes: Array<{mesh:PIXI.Graphics,anchor:{x:number,y:number},body:object,axle:object,k:number,c:number}>, suspTravel: Array<number>, dead: boolean }}
  */
 export function createCar(world, spec, spawn) {
   const r = spec.wheelRadius;
@@ -227,8 +218,13 @@ export function createCar(world, spec, spawn) {
   // les roues restent à offset local fixe ; seule leur rotation est resync).
   const container = new PIXI.Container();
   const bodyMesh = new PIXI.Graphics();
-  drawBody(bodyMesh, spec, spec.color);
+  drawPaint(bodyMesh, spec, spec.paint); // peinture procédurale, SANS contour
   container.addChild(bodyMesh);
+  // Reflet soleil dynamique (strie additive sur le flanc, suit le tangage).
+  const glintMesh = new PIXI.Graphics();
+  glintMesh.blendMode = 'add';
+  drawGlint(glintMesh, spec, spec.paint, 0);
+  container.addChild(glintMesh);
 
   // Éclairage : la lampe (halo chaud) vit dans le container châssis ; le
   // cône de visibilité (fan raycasté), la nappe route et les poussières sont
@@ -282,6 +278,7 @@ export function createCar(world, spec, spawn) {
     spec,
     container,
     bodyMesh,
+    glintMesh,
     wheelMeshes,
     suspTravel: [0, 0],
     dead: false,
@@ -542,6 +539,9 @@ export function syncCarVisual(car, alpha = 1) {
   }
   car.container.position.set(t.x, t.y);
   car.container.rotation = angle;
+  // Reflet soleil : glisse sur le flanc avec le tangage (1 quad, enfant du
+  // container donc déjà synchronisé ; seul le motif change).
+  if (car.glintMesh && !car.dead) drawGlint(car.glintMesh, car.spec, car.spec.paint, angle);
   const cos = Math.cos(-angle);
   const sin = Math.sin(-angle);
   car.wheelMeshes.forEach(({ mesh, body }) => {
@@ -812,7 +812,8 @@ export function ghostifyCar(world, car) {
       /* ignore */
     }
   }
-  drawBody(car.bodyMesh, car.spec, '#6b7280');
+  drawPaint(car.bodyMesh, car.spec, GRAVE_PAINT);
+  if (car.glintMesh) car.glintMesh.visible = false; // pas de reflet sur une épave
   for (const { mesh } of car.wheelMeshes) drawWheel(mesh, car.spec.wheelRadius, '#374151');
   car.container.alpha = 0.55;
   if (car.lightGroup) car.lightGroup.visible = false;

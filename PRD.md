@@ -62,7 +62,7 @@
 ### 3.3 Voiture aléatoire (1 voiture / player, V1 = 1 player local)
 
 * Chaque voiture 2D low-poly comprend **exactement** :
-  * 1 carrosserie : polygone convexe/legèrement concave de 5–7 sommets, style berline/hatchback anguleux. Dimensions random : longueur 70–110 px, hauteur 22–38 px. Couleur random parmi palette néon sombre (`#f43f5e #f59e0b #22d3ee #a78bfa #a3e635 #f472b6`), contour `#e5e7eb` 2px.
+  * 1 carrosserie : polygone convexe/legèrement concave de 5–7 sommets, style berline/hatchback anguleux. Dimensions random : longueur 70–110 px, hauteur 22–38 px. Peinture procédurale `src/peinture.js` (uni 45 % / bi-ton 25 % / bandes racing 15 % / bas de caisse 15 %, teintes harmonieuses + neutres, garde-fou lisibilité dark), reflet environnement (dégradé ciel/sol, nacre, point chaud spéculaire, ligne de caractère, strie soleil dynamique suivant le tangage). **Aucun contour** (définition par le contraste du dégradé).
   * 1 phare à l'avant : lampe `#fff7d6` + halo additif, projecteur réaliste :
   * faisceau raycasté (56 rayons sur ±15°, incliné ~8° vers le sol,
   * portée 380 px) contre les segments route — ombres exactes derrière les
@@ -149,6 +149,8 @@
 /src/game.js           — classe Game : état (ready|driving|flipped|dead), distance, best, graves, respawn
 /src/route.js          — génération + colliders + rendu + routeYAt + DIFFICULTIES
 /src/voiture.js        — randomCarSpec + createCar + applyDrive + sync meshes
+/src/peinture.js         — randomPaint + drawPaint/drawGlint (peinture + reflet, sans contour)
+/src/engine.js           — moteur audio Greenwood (boîte auto, crossfade RPM/charge)
 /src/camera.js         — follow intelligent + zoom
 /src/utils.js          — mulberry32, hashSeed, clamp, lerp, smoothstep
 /src/style.css         — dark theme + HUD
