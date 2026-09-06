@@ -44,12 +44,13 @@ export const SPAWN_X = 0;
  */
 export class Game {
   /**
-   * @param {{ world: import('@dimforge/rapier2d-compat').World, worldLayer: PIXI.Container, camera?: object, best?: number, ui?: { toast?: (msg:string)=>void, flip?: (visible:boolean, remaining:number, frac:number)=>void, hint?: ()=>void } }} opts
+   * @param {{ world: import('@dimforge/rapier2d-compat').World, worldLayer: PIXI.Container, camera?: object, best?: number, audio?: { onSpawn?: ()=>void, onDeath?: ()=>void } , ui?: { toast?: (msg:string)=>void, flip?: (visible:boolean, remaining:number, frac:number)=>void, hint?: ()=>void } }} opts
    */
-  constructor({ world, worldLayer, camera = null, best = 0, ui = {} }) {
+  constructor({ world, worldLayer, camera = null, best = 0, audio = null, ui = {} }) {
     this.world = world;
     this.layer = worldLayer;
     this.camera = camera;
+    this.audio = audio;
     this.ui = { toast: () => {}, flip: () => {}, hint: () => {}, ...ui };
 
     this.routeGfx = new PIXI.Graphics();
@@ -142,6 +143,13 @@ export class Game {
     this.deadTimer = 0;
     this.stuckTimer = 0;
     if (this.camera) this.camera.snapTo(spawn.x, spawn.y - 80);
+    if (this.audio && typeof this.audio.onSpawn === 'function') {
+      try {
+        this.audio.onSpawn();
+      } catch {
+        /* audio optionnel */
+      }
+    }
   }
 
   /**
@@ -258,6 +266,13 @@ export class Game {
     const grave = { x: t.x, y: t.y, distance: d };
     this.graves.push(grave);
     this.addGraveLabel(grave);
+    if (this.audio && typeof this.audio.onDeath === 'function') {
+      try {
+        this.audio.onDeath();
+      } catch {
+        /* audio optionnel */
+      }
+    }
     try {
       localStorage.setItem('voituros.best', String(this.best));
     } catch {
@@ -296,6 +311,19 @@ export class Game {
   /** Ordonnée voiture. @returns {number} */
   get carY() {
     return this.car ? this.car.chassis.translation().y : 0;
+  }
+
+  /** Angle châssis (rad, pour la vitesse longitudinale du moteur audio). @returns {number} */
+  get carAngle() {
+    return this.car ? this.car.chassis.rotation() : 0;
+  }
+
+  /** Vitesse longitudinale (projetée sur l'axe caisse, px/s). @returns {number} */
+  get carLongSpeed() {
+    if (!this.car) return 0;
+    const v = this.car.chassis.linvel();
+    const a = this.car.chassis.rotation();
+    return v.x * Math.cos(a) + v.y * Math.sin(a);
   }
 
   /** Vélocité châssis. @returns {{x:number,y:number}} */

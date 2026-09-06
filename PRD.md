@@ -64,10 +64,13 @@
 * Chaque voiture 2D low-poly comprend **exactement** :
   * 1 carrosserie : polygone convexe/legèrement concave de 5–7 sommets, style berline/hatchback anguleux. Dimensions random : longueur 70–110 px, hauteur 22–38 px. Couleur random parmi palette néon sombre (`#f43f5e #f59e0b #22d3ee #a78bfa #a3e635 #f472b6`), contour `#e5e7eb` 2px.
   * 1 phare à l'avant : lampe `#fff7d6` + halo additif, projecteur réaliste :
-  * cône de visibilité raycasté (56 rayons sur ±15°, incliné ~8° vers le sol,
+  * faisceau raycasté (56 rayons sur ±15°, incliné ~8° vers le sol,
   * portée 380 px) contre les segments route — ombres exactes derrière les
-  * crêtes par construction ; atténuation physique `1/(1 + 0.6·d + 2.4·d²)` en
-  * 8+4 bandes additives (cœur `#ffe3a1` + halo `#f6c453`) ; nappe lumineuse
+  * crêtes par construction ; 3 polygones plein-fan emboîtés, teinte chaude
+  * unique (aucun découpage interne → aucune division visible ; pas de
+  * hotspot transverse : son arc coupait le faisceau en deux), largeurs et
+  * alphas étagées ≈ profil gaussien ; profondeur par nappe route + halo ;
+  * atténuation physique `1/(1 + 0.6·d + 2.4·d²)` ; micro-tremblement de visée ; nappe lumineuse
   * suivant la chaussée sous l'empreinte ; 44 poussières advectées (vent
   * relatif + scintillement, clippées au polygone de visibilité : jamais
   * sous le sol) ; micro-flicker de lampe ; éteint sur épaves.
@@ -135,7 +138,7 @@
 * Perf : 60fps sur laptop standard, < 700 colliders route (600 segments OK), pas d'alloc par frame dans la boucle (réutiliser vecteurs).
 * Robustesse : seed invalide ⇒ fallback `Date.now()%100000`, difficulté inconnue ⇒ Medium, WebGL indisponible ⇒ message DOM.
 * Accessibilité : boutons focusables, `aria-label`, contraste ≥ 4.5:1 pour HUD texte.
-* Code : ES modules, `src/main.js` < 300 lignes, logique découpée (`route.js`, `voiture.js`, `camera.js`, `game.js`, `utils.js`), JSDoc sur fonctions exportées, `npm run dev/build/preview` OK, `vite build` sans warning bloquant.
+* Code : ES modules, `src/main.js` < 300 lignes, logique découpée (`route.js`, `voiture.js`, `camera.js`, `game.js`, `utils.js`), JSDoc sur fonctions exportées, `bun run dev/build/preview` OK, `vite build` sans warning bloquant.
 
 ## 5. Architecture & fichiers imposés
 
@@ -172,7 +175,7 @@
 
 ## 8. Critères d'acceptation (DoD)
 
-1. `npm install && npm run build && npm run preview` OK, page sans erreur console.
+1. `bun install && bun run build && bun run preview` OK, page sans erreur console.
 2. Route continue 12000px, plate au départ, 3 difficultés visiblement croissantes (pente/amplitude).
 3. Voiture = carrosserie polygonale + 1 phare avant + faisceau + 2 roues, random à chaque respawn (forme/couleur/rayon/empattement varient).
 4. `→` avance, `←` recule (vérifié par x croissant/décroissant), physics Rapier réelle (chute, rebond, flip possibles).

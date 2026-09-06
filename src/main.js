@@ -7,6 +7,7 @@ import RAPIER from '@dimforge/rapier2d-compat';
 import { Game } from './game.js';
 import { createCamera } from './camera.js';
 import { createSky } from './sky.js';
+import { createEngineAudio, wireEngineUI } from './engine.js';
 
 const STEP = 1 / 120;
 const $ = (id) => document.getElementById(id);
@@ -97,11 +98,17 @@ async function boot() {
     hintTimer = secs;
   };
 
+  // Son moteur Greenwood (Greenwood devant la maison de CJ, banques GENRL
+  // 88/89) : inactif jusqu'au premier geste (autoplay policy), muet si
+  // l'audio est indisponible — jamais d'erreur console.
+  const engine = createEngineAudio();
+
   const game = new Game({
     world: new RAPIER.World({ x: 0, y: 980 }),
     worldLayer,
     camera,
     best: settings.best,
+    audio: engine,
     ui: { toast, flip: setFlip, hint: () => showHint() },
   });
   game.world.timestep = STEP;
@@ -129,6 +136,8 @@ async function boot() {
     toast(`Nouvelle route ${game.difficulty[0].toUpperCase() + game.difficulty.slice(1)} #${game.seed}`);
   };
   $('btn-restart').onclick = () => game.reset();
+  // Son moteur Greenwood : bouton 🔈/🔊/🔇 + déblocage au premier geste.
+  const engineUI = wireEngineUI(engine, $('btn-mute'));
   applyRoute(settings.seed, settings.difficulty, null);
   showHint(4);
 
@@ -154,6 +163,8 @@ async function boot() {
       e.preventDefault();
     } else if (e.code === 'KeyR') {
       game.reset();
+    } else if (e.code === 'KeyM') {
+      engineUI.toggle();
     } else if (e.code === 'Space') {
       input.brake = true;
       e.preventDefault();
@@ -276,6 +287,12 @@ async function boot() {
     reset() {
       game.reset();
     },
+    audioState() {
+      return engine.state();
+    },
+    toggleMute() {
+      return engineUI.toggle();
+    },
   };
   V.carX.valueOf = () => game.carX;
   V.carX.toString = () => String(game.carX);
@@ -292,6 +309,7 @@ async function boot() {
   // sync interpolée, caméra, HUD.
   let acc = 0;
   let prev = performance.now();
+  let muteTick = 0;
   app.ticker.add(() => {
     const now = performance.now();
     const dt = Math.min((now - prev) / 1000, 0.1);
@@ -310,6 +328,14 @@ async function boot() {
     game.frame(Math.min(1, Math.max(0, acc / STEP)), dt);
     camera.update(dt, { x: game.carX, y: game.carY }, game.carVel);
     sky.update(dt, camera.camX, camera.camY);
+    // Moteur Greenwood : RPM via rapports (dents de scie), charge = gaz,
+    // roues libres quand retourné (ça mouline), coupé si mort.
+    engine.update(dt, {
+      speed: game.carLongSpeed,
+      throttle: input.dir !== 0 ? 1 : 0,
+      dead: game.state === 'dead',
+      free: game.state === 'flipped',
+    });
 
     const d = `${game.distance.toFixed(1)} m`;
     if (d !== lastDist) {
@@ -330,6 +356,8 @@ async function boot() {
       hintTimer -= dt;
       if (hintTimer <= 0) elHint.classList.add('hidden');
     }
+    // État du bouton son (débloqué/muet) : 2×/s suffisent, pas d'alloc chaude.
+    if ((muteTick++ & 31) === 0) engineUI.paint();
   });
 }
 

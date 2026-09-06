@@ -652,34 +652,33 @@ function falloff(f) {
 }
 
 /**
- * Dessine une bande annulaire du fan (entre fractions f0 et f1 des impacts),
- * en une seule forme remplie.
+ * Dessine un polygone plein-fan (lampe → arc d'impacts entre deux rayons,
+ * optionnellement ramené vers la lampe par `scale`) en UNE seule forme.
+ * Le faisceau est composé de 4 polygones emboîtés (même teinte, alphas
+ * étagées) : aucun découpage interne, donc aucune division visible —
+ * seule la silhouette (vraie limite d'ombre) et un halo central existent.
  * @param {PIXI.Graphics} g Cible. @param {number} lx Lampe X. @param {number} ly Lampe Y.
  * @param {Float32Array} coss Cos par rayon. @param {Float32Array} sins Sin par rayon.
- * @param {Float32Array} hits Impacts par rayon. @param {number} f0 @param {number} f1 Fractions.
+ * @param {Float32Array} hits Impacts par rayon.
+ * @param {number} i0 Premier rayon. @param {number} i1 Dernier rayon.
+ * @param {number} scale Fraction d'impact (1 = impacts réels, < 1 = hotspot).
  * @param {string} color @param {number} alpha Alpha (déjà atténuée).
  * @returns {void}
  */
-function drawFanBand(g, lx, ly, coss, sins, hits, f0, f1, color, alpha) {
-  const n = hits.length;
-  g.moveTo(lx + coss[0] * hits[0] * f0, ly + sins[0] * hits[0] * f0);
-  for (let i = 1; i < n; i++) g.lineTo(lx + coss[i] * hits[i] * f0, ly + sins[i] * hits[i] * f0);
-  for (let i = n - 1; i >= 0; i--) g.lineTo(lx + coss[i] * hits[i] * f1, ly + sins[i] * hits[i] * f1);
+function drawFanPoly(g, lx, ly, coss, sins, hits, i0, i1, scale, color, alpha) {
+  g.moveTo(lx, ly);
+  for (let i = i0; i <= i1; i++) g.lineTo(lx + coss[i] * hits[i] * scale, ly + sins[i] * hits[i] * scale);
   g.closePath();
   g.fill({ color, alpha });
 }
 
-// Bandes du cône interne (cœur chaud) : fines pour un dégradé sans arcs.
-const FAN_INNER_FR = [0, 0.1, 0.2, 0.32, 0.45, 0.6, 0.75, 0.9, 1.0];
-// Bandes du halo externe (bords doux).
-const FAN_OUTER_FR = [0, 0.22, 0.45, 0.7, 1.0];
-
 /**
- * Met à jour l'éclairage par frame : cône de visibilité raycasté contre la
- * route (ombres exactes derrière les crêtes), atténuation physique en
- * distance, nappe lumineuse suivant la chaussée sous le faisceau, poussières
- * advectées (vent relatif + scintillement), micro-flicker de lampe.
- * Zéro alloc par frame (tampons pré-alloués sur car).
+ * Met à jour l'éclairage par frame : faisceau raycasté contre la route
+ * (ombres exactes derrière les crêtes), profil angulaire doux (pénombre,
+ * aucun bord net), dégradé chaud→ambré en distance, micro-tremblement de
+ * visée (vibrations caisse), nappe lumineuse suivant la chaussée,
+ * poussières advectées, micro-flicker de lampe.
+ * Zéro alloc par frame (tampons pré-alloués sur car + statiques module).
  * @param {object} car Voiture.
  * @param {number} dt Delta temps rendu (s).
  * @param {Array<{x:number,y:number}>|null} routePoints Points de la route (ou null).
@@ -703,28 +702,33 @@ export function updateCarLight(car, dt, routePoints) {
   const lx = pos.x + cb * (car.noseX - 2);
   const ly = pos.y + sb * (car.noseX - 2);
   const aim = angle + LIGHT_PITCH;
+  // Micro-tremblement de visée (±0.5°, vibrations de la caisse) : le faisceau
+  // vit, les ombres frémissent — un projecteur réel n'est jamais figé.
+  const aimEff = aim + 0.008 * Math.sin(t * 1.7) + 0.005 * Math.sin(t * 4.3 + 0.9);
   const edges = edgesFor(routePoints);
-  const hits = castFan(lx, ly, aim, FAN_HALF, FAN_RAYS, FAN_RANGE, edges, car.fanHits);
+  const hits = castFan(lx, ly, aimEff, FAN_HALF, FAN_RAYS, FAN_RANGE, edges, car.fanHits);
   // Directions par rayon (réutilise le tampon fanHits via tableaux locaux
   // statiques : pas d'alloc).
   for (let i = 0; i < FAN_RAYS; i++) {
-    const a = aim - FAN_HALF + (2 * FAN_HALF * i) / (FAN_RAYS - 1);
+    const a = aimEff - FAN_HALF + (2 * FAN_HALF * i) / (FAN_RAYS - 1);
     fanCos[i] = Math.cos(a);
     fanSin[i] = Math.sin(a);
   }
   const flick = 1 + 0.022 * Math.sin(t * 12.9) + 0.014 * Math.sin(t * 5.7 + 1.7);
   car.lightGroup.alpha = 0.92 + 0.08 * flick;
-  // Cône : cœur (8 bandes fines) + halo doux (4 bandes, angle plein).
+  // Faisceau : 3 polygones plein-fan emboîtés, même teinte chaude (aucune
+  // marche de couleur, aucun découpage interne → aucune division visible).
+  // Largeurs et alphas étagées ≈ profil gaussien ; les silhouettes suivent
+  // les impacts raycastés (ombres exactes = vraies limites d'ombre).
+  // PAS de hotspot transverse : son arc coupait le faisceau en deux
+  // (moitié proche claire, moitié loin sombre). La profondeur vient de la
+  // nappe route + du halo lampe, pas d'un arc.
   const fan = car.fanMesh;
   fan.clear();
-  for (let j = 0; j < FAN_INNER_FR.length - 1; j++) {
-    const mid = (FAN_INNER_FR[j] + FAN_INNER_FR[j + 1]) / 2;
-    drawFanBand(fan, lx, ly, fanCos, fanSin, hits, FAN_INNER_FR[j], FAN_INNER_FR[j + 1], '#ffe3a1', 0.26 * falloff(mid) * flick);
-  }
-  for (let j = 0; j < FAN_OUTER_FR.length - 1; j++) {
-    const mid = (FAN_OUTER_FR[j] + FAN_OUTER_FR[j + 1]) / 2;
-    drawFanBand(fan, lx, ly, fanCos, fanSin, hits, FAN_OUTER_FR[j], FAN_OUTER_FR[j + 1], '#f6c453', 0.09 * falloff(mid) * flick);
-  }
+  const last = FAN_RAYS - 1;
+  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 0, last, 1, '#ffe9b8', 0.06 * flick);
+  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 6, last - 6, 1, '#ffe9b8', 0.06 * flick);
+  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 14, last - 14, 1, '#ffe9b8', 0.075 * flick);
   // Nappe : suit la chaussée sous l'empreinte du faisceau (impacts réels).
   const wash = car.washMesh;
   wash.clear();
@@ -766,7 +770,16 @@ export function updateCarLight(car, dt, routePoints) {
     const i0 = fi <= 0 ? 0 : fi >= FAN_RAYS - 1 ? FAN_RAYS - 2 : Math.floor(fi);
     const fr = fi - i0;
     const maxR = hits[i0] * (1 - fr) + hits[i0 + 1] * fr;
-    if (p.r > maxR - 6 || p.r < 12) p.r = 15 + p.seed * Math.max(20, maxR - 30);
+    if (p.r > maxR - 6 || p.r < 12) {
+      // Re-tirage complet à chaque recyclage : angle, distance ET phase.
+      // Avant, chaque particule rebouclait sur un rail fixe (même seed) —
+      // à basse vitesse / en marche arrière, vent faible oblige, le pompage
+      // en boucle devenait bien visible.
+      p.a = Math.random() * 2 - 1;
+      p.seed = Math.random();
+      p.ph = Math.random() * Math.PI * 2;
+      p.r = 15 + p.seed * Math.max(20, maxR - 30);
+    }
     const px = lx + Math.cos(pa) * p.r;
     const py = ly + Math.sin(pa) * p.r;
     const bright = falloff(p.r / FAN_RANGE) * (1 - p.a * p.a) * (0.5 + 0.5 * Math.sin(t * p.tw + p.ph)) * flick;
