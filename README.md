@@ -1,6 +1,6 @@
 # 🚗 Voituros — roule loin, meurs avec style
 
-![VOITUROS — titre de glace sur le lac gelé](screenshots/title.png)
+![VOITUROS — titre de glace sur le lac gelé](screenshots/title-v2.png)
 
 **Voituros** est un petit jeu de conduite 2D à la physique délicieusement nerveuse : pilote une voiture low-poly à la peinture unique sur un lac gelé qui serpente sous une vraie Voie lactée, va le plus loin possible… et évite de finir sur le toit.
 
