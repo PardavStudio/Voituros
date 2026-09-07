@@ -626,9 +626,7 @@ export function updateCarLight(car, dt, routePoints) {
   const fan = car.fanMesh;
   fan.clear();
   const last = FAN_RAYS - 1;
-  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 0, last, 1, '#ffe9b8', 0.03 * flick);
-  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 6, last - 6, 1, '#ffe9b8', 0.035 * flick);
-  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 14, last - 14, 1, '#fff0cf', 0.05 * flick);
+  drawFanPoly(fan, lx, ly, fanCos, fanSin, hits, 0, last, 1, '#ffdf6e', 0.1 * flick);
 
   const wash = car.washMesh;
   wash.clear();

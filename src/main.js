@@ -66,12 +66,8 @@ async function boot() {
   const snowGfx = new PIXI.Graphics();
   snowLayer.addChild(snowGfx);
   const snow = createSnow(7);
-
+  const snowView = { w: 0, h: 0, camX: 0, camY: 0, zoom: 1 };
   const snowEnv = {
-    camVX: 0,
-    camX: 0,
-    camY: 0,
-    zoom: 1,
     beam: (wx, wy) => (game.car ? beamLight(game.car, wx, wy) : 0),
     groundY: (wx) => (game.route ? routeYAt(game.route.points, wx) : 1e9),
   };
@@ -319,7 +315,6 @@ async function boot() {
   let acc = 0;
   let prev = performance.now();
   let muteTick = 0;
-  let prevCamX = 0;
   app.ticker.add(() => {
     const now = performance.now();
     const dt = Math.min((now - prev) / 1000, 0.1);
@@ -339,13 +334,12 @@ async function boot() {
     sky.update(dt, camera.camX, camera.camY);
 
     game.updateIce(dt, camera.camX, (app.screen.width || innerWidth) / (camera.zoom || 1));
-    const camVX = dt > 0 ? (camera.camX - prevCamX) / dt : 0;
-    prevCamX = camera.camX;
-    snowEnv.camVX = camVX;
-    snowEnv.camX = camera.camX;
-    snowEnv.camY = camera.camY;
-    snowEnv.zoom = camera.zoom || 1;
-    drawSnow(snowGfx, snow, dt, app.screen.width || innerWidth, app.screen.height || innerHeight, camVX, snowEnv);
+    snowView.w = app.screen.width || innerWidth;
+    snowView.h = app.screen.height || innerHeight;
+    snowView.camX = camera.camX;
+    snowView.camY = camera.camY;
+    snowView.zoom = camera.zoom || 1;
+    drawSnow(snowGfx, snow, dt, snowView, snowEnv);
 
     engine.update(dt, {
       speed: game.carLongSpeed,

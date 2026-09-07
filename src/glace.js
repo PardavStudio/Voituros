@@ -1,12 +1,12 @@
 import { mulberry32 } from './utils.js';
 import { routeYAt } from './route.js';
 
-export const ICE_DEPTH = 150;
+export const ICE_DEPTH = 300;
 
 export const ICE_TINTS = {
-  easy: { top: '#d8eff7', mid: '#7fb8d9', deep: '#1d5a85' },
-  medium: { top: '#cfe8f5', mid: '#6fa9cf', deep: '#174e78' },
-  hard: { top: '#c2ddf0', mid: '#6399c2', deep: '#123f66' },
+  easy: { top: '#d3e9f4', mid: '#5f97ba', deep: '#1a4c72' },
+  medium: { top: '#c9e4f2', mid: '#5d93b8', deep: '#1a4e75' },
+  hard: { top: '#c0dcf0', mid: '#578ab2', deep: '#174870' },
 };
 
 function mixHex(a, b, t) {
@@ -30,27 +30,17 @@ export function drawIce(graphics, points, difficulty, seed) {
   const tint = ICE_TINTS[key] || ICE_TINTS.medium;
   const n = points.length;
   const rng = mulberry32(typeof seed === 'number' ? seed : 1);
+  const x0 = points[0].x;
+  const x1 = points[n - 1].x;
 
-  graphics.moveTo(points[0].x, points[0].y + ICE_DEPTH);
-  for (let i = 0; i < n; i++) graphics.lineTo(points[i].x, points[i].y + ICE_DEPTH);
+  const ICE = depthColor(tint, 0.3);
+  graphics.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < n; i++) graphics.lineTo(points[i].x, points[i].y);
   graphics.lineTo(points[n - 1].x, points[n - 1].y + 2000);
   graphics.lineTo(points[0].x, points[0].y + 2000);
   graphics.closePath();
-  graphics.fill({ color: '#070c16' });
+  graphics.fill({ color: ICE });
 
-  const BANDS = 14;
-  for (let b = 0; b < BANDS; b++) {
-    const f0 = b / BANDS;
-    const f1 = (b + 1) / BANDS;
-    graphics.moveTo(points[0].x, points[0].y + f0 * ICE_DEPTH);
-    for (let i = 1; i < n; i++) graphics.lineTo(points[i].x, points[i].y + f0 * ICE_DEPTH);
-    for (let i = n - 1; i >= 0; i--) graphics.lineTo(points[i].x, points[i].y + f1 * ICE_DEPTH);
-    graphics.closePath();
-    graphics.fill({ color: depthColor(tint, (f0 + f1) / 2) });
-  }
-
-  const x0 = points[0].x;
-  const x1 = points[n - 1].x;
   const clampCrack = (x, y) => {
     const cx = x < x0 + 10 ? x0 + 10 : x > x1 - 10 ? x1 - 10 : x;
     const sy = routeYAt(points, cx);
@@ -100,7 +90,7 @@ export function drawIce(graphics, points, difficulty, seed) {
   for (let r = 0; r < 3; r++) {
     let x = x0 + rng() * (x1 - x0 - 600);
     graphics.moveTo(x, routeYAt(points, x) + 4);
-    const len = 300 + rng() * 300;
+    const len = Math.min(300 + rng() * 300, x1 - 5 - x);
     for (let s = x; s < x + len; s += 24) {
       graphics.lineTo(s, routeYAt(points, s) + 4 + Math.sin(s * 0.02 + r * 2) * 3);
     }
@@ -115,34 +105,55 @@ export function drawIce(graphics, points, difficulty, seed) {
     graphics.fill({ color: '#e8f4fc', alpha: 0.05 + rng() * 0.1 });
   }
 
-  for (let i = 0; i < 500; i++) {
+  for (let i = 0; i < 1300; i++) {
     const x = x0 + rng() * (x1 - x0);
     const y = routeYAt(points, x) + rng() * rng() * 14;
     const s = rng() < 0.8 ? 1 : 2;
     graphics.rect(x, y, s, s);
-    graphics.fill({ color: rng() < 0.7 ? '#ffffff' : '#bfe6ff', alpha: 0.1 + rng() * 0.3 });
+    graphics.fill({ color: rng() < 0.7 ? '#ffffff' : '#bfe6ff', alpha: 0.12 + rng() * 0.33 });
   }
 
   const nc = Math.floor((x1 - x0) / 350);
   for (let i = 0; i < nc; i++) {
-    const x = x0 + rng() * (x1 - x0);
+    const x = x0 + 15 + rng() * (x1 - x0 - 30);
+    const cr = 6 + rng() * 7;
     drawCrystal(
       graphics,
       x,
-      routeYAt(points, x) + 4 + rng() * 10,
-      6 + rng() * 7,
+      routeYAt(points, x) + cr + 2 + rng() * 8,
+      cr,
       rng() * Math.PI,
       '#e8f4fc',
       0.16 + rng() * 0.16,
     );
   }
 
+  for (let i = 0; i < Math.floor((x1 - x0) / 220); i++) {
+    const w = 80 + rng() * 140;
+    const cx = x0 + w / 2 + 5 + rng() * (x1 - x0 - w - 10);
+    const drift = 3 + rng() * 8;
+    graphics.moveTo(cx - w / 2, routeYAt(points, cx - w / 2) + 2);
+    for (let x = cx - w / 2 + 12; x <= cx + w / 2; x += 12) {
+      graphics.lineTo(x, routeYAt(points, x) - drift * (0.5 + rng() * 0.5));
+    }
+    for (let x = cx + w / 2; x >= cx - w / 2; x -= 12) {
+      graphics.lineTo(x, routeYAt(points, x) + 6);
+    }
+    graphics.closePath();
+    graphics.fill({ color: '#e6eef6', alpha: 0.85 });
+    for (let k = 0; k < 24; k++) {
+      const x = cx - w / 2 + rng() * w;
+      graphics.circle(x, routeYAt(points, x) - rng() * drift, 1 + rng() * 1.5);
+      graphics.fill({ color: '#ffffff', alpha: 0.2 + rng() * 0.25 });
+    }
+  }
+
   for (let i = 0; i < 130; i++) {
     const x = x0 + rng() * (x1 - x0);
-    const y = routeYAt(points, x) + 1;
     const w = 6 + rng() * 22;
-    graphics.moveTo(x, y);
-    graphics.lineTo(x + w, y - 0.5);
+    const xB = x + w > x1 ? x1 : x + w;
+    graphics.moveTo(x, routeYAt(points, x) + 1);
+    graphics.lineTo(xB, routeYAt(points, xB) + 0.5);
     graphics.stroke({ width: 1, color: '#f4fbff', alpha: 0.07 + rng() * 0.14 });
   }
 }

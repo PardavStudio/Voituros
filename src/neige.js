@@ -1,5 +1,20 @@
+/**
+ * Neige réaliste en COORDONNÉES MONDE (verrouillée au monde comme la
+ * glace : montée/descente/vitesse/zoom de la caméra justes par
+ * construction — aucun hack de vent apparent). 3 couches de profondeur,
+ * sway sinusoïdal par flocon, rafales globales, éclairée par le faisceau
+ * et clipsée au sol. Zéro alloc par frame.
+ * @module neige
+ */
+
+/** Nombre de flocons (fixe, tient 60 fps partout). */
 export const SNOW_N = 220;
 
+/**
+ * Crée la chute (positions monde, état persistant).
+ * @param {unknown} [seed] Graine.
+ * @returns {{ flakes: Array<{ x: number, y: number, z: 0|1|2, size: number, vy: number, ph: number, fr: number, sw: number }>, t: number, wind: number }}
+ */
 export function createSnow(seed = 7) {
   let s = (typeof seed === 'number' ? seed : 7) >>> 0 || 1;
   const rnd = () => {
@@ -14,8 +29,8 @@ export function createSnow(seed = 7) {
     const r = rnd();
     const z = r < 0.4 ? 0 : r < 0.75 ? 1 : 2;
     flakes.push({
-      x: rnd(),
-      y: rnd(),
+      x: (rnd() - 0.5) * 3000,
+      y: (rnd() - 0.5) * 1600,
       z,
       size: z === 0 ? 0.7 + rnd() * 0.6 : z === 1 ? 1.2 + rnd() * 0.8 : 2 + rnd() * 0.9,
       vy: z === 0 ? 25 + rnd() * 20 : z === 1 ? 50 + rnd() * 30 : 95 + rnd() * 45,
@@ -27,46 +42,57 @@ export function createSnow(seed = 7) {
   return { flakes, t: rnd() * 20, wind: 10 };
 }
 
-export function drawSnow(g, snow, dt, w, h, camVX = 0, env = null) {
+/**
+ * Met à jour + dessine la neige (projection caméra identique au monde :
+ * sx = (wx − camX)·zoom + w/2, sy = (wy − camY)·zoom + h·0.55).
+ * @param {PIXI.Graphics} g Cible (layer écran).
+ * @param {{ flakes: Array, t: number, wind: number }} snow État.
+ * @param {number} dt Delta temps (s).
+ * @param {{ w: number, h: number, camX: number, camY: number, zoom: number }} view Vue.
+ * @param {{ beam: (wx:number,wy:number)=>number, groundY: (wx:number)=>number } | null} [env] Faisceau + sol (optionnel).
+ * @returns {void}
+ */
+export function drawSnow(g, snow, dt, view, env = null) {
   const step = Math.min(0.1, Math.max(0, dt || 0));
   snow.t += step;
   const t = snow.t;
-
   snow.wind = 10 + 18 * Math.sin(t * 0.11) + 8 * Math.sin(t * 0.043 + 2);
   g.clear();
+  const w = view.w;
+  const h = view.h;
+  const zoom = view.zoom > 0 ? view.zoom : 1;
   if (w <= 0 || h <= 0 || !Number.isFinite(step) || step <= 0) return;
-  const vx = Math.max(-1500, Math.min(1500, Number.isFinite(camVX) ? camVX : 0));
-  const useEnv =
-    env !== null &&
-    env !== undefined &&
-    env.zoom > 0 &&
-    typeof env.beam === 'function' &&
-    typeof env.groundY === 'function';
-  const ez = useEnv ? env.zoom : 1;
-  const ecx = useEnv ? env.camX : 0;
-  const ecy = useEnv ? env.camY : 0;
+  const hw = w / zoom / 2 + 120;
+  const hh = h / zoom / 2 + 120;
+  const cx = view.camX;
+  const cy = view.camY;
+  const useEnv = env !== null && env !== undefined && typeof env.beam === 'function' && typeof env.groundY === 'function';
   for (const f of snow.flakes) {
     const depthK = f.z === 0 ? 0.4 : f.z === 1 ? 0.7 : 1;
-    f.y += (f.vy / h) * step;
-
-    const swayX = Math.sin(t * f.fr + f.ph) * f.sw;
-    f.x += ((snow.wind * depthK - vx * depthK * 0.9 + swayX * f.fr) / w) * step;
-    if (f.y > 1.02) {
-      f.y = -0.02;
-      f.x = Math.random();
-    } else if (f.y < -0.03) {
-      f.y = 1.01;
+    f.y += (f.vy / 1) * step;
+    f.x += snow.wind * depthK * step;
+    if (f.x < cx - hw) {
+      f.x += hw * 2;
+      f.y = cy + (Math.random() * 2 - 1) * hh;
+    } else if (f.x > cx + hw) {
+      f.x -= hw * 2;
+      f.y = cy + (Math.random() * 2 - 1) * hh;
     }
-    if (f.x > 1.03) f.x -= 1.06;
-    else if (f.x < -0.03) f.x += 1.06;
-    const px = f.x * w + swayX * 0.35;
-    const py = f.y * h;
+    if (f.y < cy - hh) {
+      f.y += hh * 2;
+      f.x = cx + (Math.random() * 2 - 1) * hw;
+    } else if (f.y > cy + hh) {
+      f.y -= hh * 2;
+      f.x = cx + (Math.random() * 2 - 1) * hw;
+    }
+    const swayX = Math.sin(t * f.fr + f.ph) * f.sw;
+    const wx = f.x + swayX * 0.35;
+    const wy = f.y;
+    const px = (wx - cx) * zoom + w / 2;
+    const py = (wy - cy) * zoom + (h * 0.55);
     let alpha = f.z === 0 ? 0.28 : f.z === 1 ? 0.5 : 0.75;
     let tint = '#f2f7fc';
     if (useEnv) {
-
-      const wx = (px - w / 2) / ez + ecx;
-      const wy = (py - h * 0.55) / ez + ecy;
       if (wy > env.groundY(wx) + 2) {
         alpha *= 0.06;
       } else {
@@ -77,9 +103,8 @@ export function drawSnow(g, snow, dt, w, h, camVX = 0, env = null) {
         }
       }
     }
+    const s = f.size * zoom;
     if (f.z === 2) {
-
-      const s = f.size;
       g.moveTo(px - s, py);
       g.lineTo(px, py - s * 1.25);
       g.lineTo(px + s, py);
@@ -87,9 +112,8 @@ export function drawSnow(g, snow, dt, w, h, camVX = 0, env = null) {
       g.closePath();
       g.fill({ color: tint, alpha });
     } else {
-      g.circle(px, py, f.size);
+      g.circle(px, py, s);
       g.fill({ color: tint, alpha });
     }
   }
 }
-

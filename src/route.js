@@ -52,11 +52,14 @@ export function generateRoute(seed, difficulty) {
 
   const n1 = makeNoise1D(rng, P.stepNoise || 140, START_X, END_X);
   const n2 = makeNoise1D(rng, (P.stepNoise || 140) / 2.7, START_X, END_X);
+  const wob = makeNoise1D(rng, 430, START_X, END_X);
+  const warpAmp = P.L1 * 0.18;
 
   const rawY = (x) => {
     const env = smoothstep(200, 800, x);
-    const fbm = 0.65 * n1(x) + 0.35 * n2(x + 13.7);
-    return env * (P.A1 * Math.sin((TAU * x) / P.L1 + phi1) + P.A2 * Math.sin((TAU * x) / P.L2 + phi2) + P.A3 * fbm);
+    const xw = x + warpAmp * wob(x);
+    const fbm = 0.65 * n1(xw) + 0.35 * n2(xw + 13.7);
+    return env * (P.A1 * Math.sin((TAU * xw) / P.L1 + phi1) + P.A2 * Math.sin((TAU * xw) / P.L2 + phi2) + P.A3 * fbm);
   };
 
   const maxDy = Math.tan((P.slopeMaxDeg * Math.PI) / 180) * DX;
